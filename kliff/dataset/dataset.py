@@ -16,6 +16,14 @@ import colabfit.tools.configuration
 from colabfit.tools.database import MongoDatabase
 import sys
 
+try:
+    import ase.io
+    from ase import Atoms
+    ase_available = True
+except ImportError:
+    ase_available = False
+
+
 # map from file_format to file extension
 SUPPORTED_FORMAT = {"xyz": ".xyz"}
 
@@ -97,7 +105,7 @@ class Configuration:
         cls,
         filename: Path,
         weight: Optional[Weight] = None,
-        file_format: str = "xyz",
+        file_format: str = "xyz"
     ):
         """
         Read configuration from file.
@@ -118,10 +126,34 @@ class Configuration:
         cell = np.asarray(cell)
         species = [str(i) for i in species]
         coords = np.asarray(coords)
-        PBC = [bool(i) for i in PBC]
+        PBC = []
+        # PBC = [bool(i) if type(i) == bool else  for i in PBC]
+        for i in PBC:
+            if type(i) == int:
+                PBC.append(bool(i))
+            elif type(i) == bool:
+                PBC.append(i)
+            elif type(i) == str:
+                if i == "True" or i == "true" or i == "TRUE" or i == "T" or i == "t":
+                    PBC.append(True)
+                elif i == "False" or i == "false" or i == "FALSE" or i == "F" or i == "f":
+                    PBC.append(False)
+                else:
+                    raise ConfigurationError(
+                        f"Expect PBC to be int (1,0), bool (True, False), or str ('True', 'true', T, t), etc."
+                        f"got: {PBC}."
+                    )
+            else:
+                raise ConfigurationError(
+                    f"Expect PBC to be int (1,0), bool (True, False), or str ('True', 'true', T, t), etc."
+                    f"got: {PBC}."
+                )
+
         energy = float(energy) if energy is not None else None
         forces = np.asarray(forces) if forces is not None else None
         stress = [float(i) for i in stress] if stress is not None else None
+
+
 
         self = cls(
             cell,
@@ -171,6 +203,37 @@ class Configuration:
             dynamic_load=dynamic_load
         )
         return self
+
+    @classmethod
+    def from_ase(cls, ase_atoms: ase.Atoms, weight: Optional[Weight] = None,
+                 energy_key: str= "energy", forces_key: str= "forces"):
+
+        cell = ase_atoms.get_cell()
+        species = ase_atoms.get_chemical_symbols()
+        coords = ase_atoms.get_positions()
+        PBC = ase_atoms.get_pbc()
+        energy = ase_atoms.info[energy_key]
+        try:
+            forces = ase_atoms.arrays[forces_key]
+        except KeyError:
+            forces = None
+        stress = ase_atoms.get_stress()
+
+        if not weight:
+            weight = 1.0
+
+        self = cls(
+            cell,
+            species,
+            coords,
+            PBC,
+            energy,
+            forces,
+            stress,
+            weight,
+        )
+        return self
+
 
     def to_file(self, filename: Path, file_format: str = "xyz"):
         """
@@ -526,11 +589,19 @@ class Dataset(TorchDataset):
         kim_property=None,
         colabfit_dataset=None,
         descriptor=None,
+        parser=None,
+        energy_key=None,
+        forces_key="force",
     ):
         self.file_format = file_format
         self.descriptor = descriptor
+        if parser == "ase" and ase_available is False:
+            raise ModuleNotFoundError(
+                "ASE is not installed. Please install ASE first to use ASE parser."
+            )
+        self.parser = parser
         if path is not None:
-            self.configs = self._read(path, file_format)
+            self.configs = self._read(path, file_format=file_format, parser=parser, energy_key=energy_key, forces_key=forces_key)
 
         elif colabfit_database is not None:
             if colabfit_dataset is not None:
@@ -589,7 +660,7 @@ class Dataset(TorchDataset):
         return len(self.configs)
 
     @staticmethod
-    def _read(path: Path, weight: Optional[Weight] = None, file_format: str = "xyz"):
+    def _read(path: Path, weight: Optional[Weight] = None, file_format: str = "xyz", parser=None, energy_key=None, forces_key=None):
         """
         Read atomic configurations from path.
         """
@@ -614,11 +685,19 @@ class Dataset(TorchDataset):
         else:
             parent = path.parent
             all_files = [path]
+        if forces_key is None:
+            forces_key = "force" # default forces key in ASE
 
-        configs = [
-            Configuration.from_file(f, copy.copy(weight), file_format)
-            for f in all_files
-        ]
+        if parser == "ase":
+            configs = [
+                Configuration.from_ase(ase.io.read(f), copy.copy(weight),energy_key=energy_key, forces_key=forces_key)
+                for f in all_files
+            ]
+        else:
+            configs = [
+                Configuration.from_file(f, copy.copy(weight), file_format)
+                for f in all_files
+            ]
 
         if len(configs) <= 0:
             raise DatasetError(
