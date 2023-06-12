@@ -217,7 +217,11 @@ class Configuration:
             forces = ase_atoms.arrays[forces_key]
         except KeyError:
             forces = None
-        stress = ase_atoms.get_stress()
+
+        try:
+            stress = ase_atoms.get_stress()
+        except RuntimeError:
+            stress = None
 
         if not weight:
             weight = 1.0
@@ -233,7 +237,6 @@ class Configuration:
             weight,
         )
         return self
-
 
     def to_file(self, filename: Path, file_format: str = "xyz"):
         """
@@ -689,10 +692,17 @@ class Dataset(TorchDataset):
             forces_key = "force" # default forces key in ASE
 
         if parser == "ase":
-            configs = [
-                Configuration.from_ase(ase.io.read(f), copy.copy(weight),energy_key=energy_key, forces_key=forces_key)
-                for f in all_files
-            ]
+            if len(all_files) == 1:
+                all_configs = ase.io.read(all_files[0], ":")
+                configs = [
+                    Configuration.from_ase(config, copy.copy(weight),energy_key=energy_key, forces_key=forces_key)
+                    for config in all_configs
+                ]
+            else:
+                configs = [
+                    Configuration.from_ase(ase.io.read(f), copy.copy(weight),energy_key=energy_key, forces_key=forces_key)
+                    for f in all_files
+                ]
         else:
             configs = [
                 Configuration.from_file(f, copy.copy(weight), file_format)
