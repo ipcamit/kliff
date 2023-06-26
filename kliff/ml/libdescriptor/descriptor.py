@@ -147,7 +147,8 @@ class Descriptor:
         for i in range(n_atoms):
             neigh_list, _, _ = self.nl_ctx.get_neigh(i)
             # TODO Implement and use compute function for faster evaluation. Move this loop to C++.
-            descriptors[i, :] = lds.compute_single_atom(self._cdesc, i, species, np.array(neigh_list, dtype=np.intc),
+            if len(neigh_list) != 0:
+                descriptors[i, :] = lds.compute_single_atom(self._cdesc, i, species, np.array(neigh_list, dtype=np.intc),
                                                         self.nl_ctx.coords)
         return descriptors
 
@@ -162,10 +163,11 @@ class Descriptor:
 
         for i in range(n_atoms):
             neigh_list, _, _ = self.nl_ctx.get_neigh(i)
-            descriptors_derivative = lds.gradient_single_atom(self._cdesc, i, species,
+            if len(neigh_list) != 0:
+                descriptors_derivative = lds.gradient_single_atom(self._cdesc, i, species,
                                                               np.array(neigh_list, dtype=np.intc), self.nl_ctx.coords,
                                                               descriptor, dE_dZeta[i, :])
-            derivatives_unrolled += descriptors_derivative.reshape(-1, 3)
+                derivatives_unrolled += descriptors_derivative.reshape(-1, 3)
 
         derivatives = np.zeros(configuration.coords.shape)
         neigh_images = self.nl_ctx.get_image()
