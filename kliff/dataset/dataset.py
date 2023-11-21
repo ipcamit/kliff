@@ -10,7 +10,7 @@ from monty.dev import requires
 
 from kliff.dataset.extxyz import read_extxyz, write_extxyz
 from kliff.dataset.weight import Weight
-from kliff.utils import stress_to_voigt, to_path
+from kliff.utils import stress_to_voigt, stress_to_tensor, to_path
 
 # For type checking
 if TYPE_CHECKING:
@@ -272,6 +272,27 @@ class Configuration:
         )
         return self
 
+    def to_ase_atoms(self):
+        """
+        Convert the configuration to ase.Atoms object.
+
+        Returns:
+            ase.Atoms representation of the Configuration
+        """
+        atoms = ase.Atoms(
+            symbols=self.species,
+            positions=self.coords,
+            cell=self.cell,
+            pbc=self.PBC,
+        )
+        if self.energy is not None:
+            atoms.info["energy"] = self.energy
+        if self.forces is not None:
+            atoms.set_array("forces", self.forces)
+        if self.stress is not None:
+            atoms.info["stress"] = stress_to_tensor(self.stress)
+        return atoms
+
     @property
     def cell(self) -> np.ndarray:
         """
@@ -306,8 +327,6 @@ class Configuration:
         """
         Potential energy of the configuration.
         """
-        if self._energy is None:
-            raise ConfigurationError("Configuration does not contain energy.")
         return self._energy
 
     @energy.setter
@@ -324,8 +343,6 @@ class Configuration:
         """
         Return a `Nx3` matrix of the forces on each atoms.
         """
-        if self._forces is None:
-            raise ConfigurationError("Configuration does not contain forces.")
         return self._forces
 
     @forces.setter
@@ -345,8 +362,6 @@ class Configuration:
         :math:`\sigma=[\sigma_{xx},\sigma_{yy},\sigma_{zz},\sigma_{yz},\sigma_{xz},
         \sigma_{xy}]`.
         """
-        if self._stress is None:
-            raise ConfigurationError("Configuration does not contain stress.")
         return self._stress
 
     @stress.setter
