@@ -24,6 +24,7 @@ except ImportError:
     MongoDatabase = None
 
 import ase.io
+from ase.data import chemical_symbols
 
 # map from file_format to file extension
 SUPPORTED_FORMAT = {"xyz": ".xyz"}
@@ -177,6 +178,7 @@ class Configuration:
                 function.
         """
         try:
+            configuration_id = data_object['relationships'][0]['configuration']
             fetched_configuration = database_client.configurations.find_one({'colabfit-id': data_object['relationships'][0]['configuration']})
             fetched_properties = list(database_client.property_instances.find({'colabfit-id':{'$in':data_object['relationships'][0]['property_instance']}}))
         except:
@@ -185,7 +187,7 @@ class Configuration:
                 f"Please run db.configurations.find('_id':{data_object}) to verify response. "
             )
         cell = np.asarray(fetched_configuration['cell'])
-        species = fetched_configuration.get_chemical_symbols()
+        species = [chemical_symbols[int(i)] for i in fetched_configuration['atomic_numbers']]
         coords = np.asarray(fetched_configuration['positions'])
         PBC = [bool(i) for i in fetched_configuration['pbc']]
 
@@ -201,7 +203,6 @@ class Configuration:
                 stress = np.asarray(property['cauchy-stress']['stress']['source-value'])
 
         stress = stress_to_voigt(stress)
-
         self = cls(
             cell,
             species,
@@ -210,11 +211,10 @@ class Configuration:
             energy,
             forces,
             stress,
-            identifier=data_object["configuration_id"],
+            identifier=configuration_id,
             weight=weight,
         )
         self.metadata = {
-            "database_client": database_client,
             "data_object": data_object,
         }
 
@@ -242,7 +242,12 @@ class Configuration:
         species = atoms.get_chemical_symbols()
         coords = atoms.get_positions()
         PBC = atoms.get_pbc()
-        energy = atoms.info[energy_key]
+
+        try:
+            energy = atoms.info[energy_key]
+        except KeyError:
+            energy = None
+
         try:
             forces = atoms.arrays[forces_key]
         except KeyError:
@@ -766,7 +771,6 @@ class Dataset:
             raise DatasetError(
                 "Either list of ase.Atoms objects or a path must be provided."
             )
-
         if ase_atoms_list:
             configs = [
                 Configuration.from_ase_atoms(
@@ -869,8 +873,13 @@ class Dataset:
         if isinstance(path, str):
             path = Path(path)
         configs = self._read_from_ase(
-            ase_atoms_list, path, weight, energy_key, forces_key, slices
-        )
+                path=path,
+                ase_atoms_list=ase_atoms_list,
+                weight=weight,
+                energy_key=energy_key,
+                forces_key=forces_key,
+                slices=slices,
+            )
         self.configs.extend(configs)
 
     def get_configs(self) -> List[Configuration]:
