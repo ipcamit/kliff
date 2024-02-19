@@ -21,14 +21,15 @@ jobs:
         run: conda info
 
       - name: Install
+        shell: bash -el {0}
         run: |
-          bash -el {0}
           conda install -c conda-forge kim-api=2.3
           python -m pip install --upgrade pip
           python -m pip install kimpy
           python -m pip install .[test]
 
       - name: Test with pytest
+        shell: bash -el {0}
         run: |
           cd tests2
           pytest
