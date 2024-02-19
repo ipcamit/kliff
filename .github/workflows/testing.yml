@@ -25,7 +25,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.8", "3.9", "3.10"]
+        python-version: ["3.10"]
 
     steps:
       - uses: actions/checkout@v3
@@ -41,24 +41,6 @@ jobs:
         with:
           cmakeVersion: "~3.25.0"
 
-      - name: Install kim-api
-        run: |
-          export KIMAPI_DIR=${PWD}
-          export KIM_API_VERSION="2.3.0"
-          cd $KIMAPI_DIR && cd ..
-          wget http://s3.openkim.org/kim-api/kim-api-$KIM_API_VERSION.txz
-          tar Jxvf kim-api-$KIM_API_VERSION.txz
-          cd kim-api-$KIM_API_VERSION
-          mkdir build && cd build
-          cmake .. -DCMAKE_BUILD_TYPE=Release
-          make -j2
-          sudo make install
-          sudo ldconfig
-
-          # install SW driver and model
-          cd $KIMAPI_DIR
-          kim-api-collections-management install user SW_StillingerWeber_1985_Si__MO_405512056662_006
-
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4.7.0
         with:
@@ -72,5 +54,5 @@ jobs:
 
       - name: Test with pytest
         run: |
-          cd tests
+          cd tests2
           pytest

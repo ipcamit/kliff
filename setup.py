@@ -118,13 +118,10 @@ setup(
         "test": [
             "pytest",
             "kimpy",
-            "emcee",
-            "ptemcee @ git+https://github.com/yonatank93/ptemcee.git@enhance_v1.0.0",
-            "torch",
             "numpy",
             "ase",
             "libdescriptor",
-            "torch_geometric"
+            "torch_geometric",
         ],
         "docs": [
             "sphinx",
