@@ -8,7 +8,7 @@ def test_lds_load():
     assert lds != None
 
 def test_descriptors():
-    desc = Descriptor(cut_off=0.5, species=["Si"], descriptor="SymmetryFunctions",hyperparameters=symmetry_functions_set30())
+    desc = Descriptor(cutoff=0.5, species=["Si"], descriptor="SymmetryFunctions",hyperparameters=symmetry_functions_set30())
     print(desc)
     assert False
 
