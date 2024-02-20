@@ -11,7 +11,6 @@ from kliff.utils import torch_available, torch_geometric_available
 
 if torch_available():
     import torch
-import numpy as np
 
 if torch_geometric_available():
     from torch_geometric.data import Data
@@ -21,7 +20,7 @@ if torch_geometric_available():
     torch_geometric_available(),
     "Pytorch Geometric is not available. It is required for PyGGraph.",
 )
-class PyGGraph:
+class PyGGraph(Data):
     """
     A Pytorch Geometric compatible graph representation of a configuration. When loaded
     into a class:`torch_geometric.data.DataLoader` the graphs of type PyGGraph
@@ -42,17 +41,17 @@ class PyGGraph:
         self.z = None
         self.contributions = None
 
-    def __inc__(self, key: str, value: "torch.Tensor", *args, **kwargs):
+    def __inc__(self, key: str, value: torch.Tensor, *args, **kwargs):
         if "index" in key or "face" in key:
             return self.num_nodes
         elif "contributions" in key:
             return 2
         elif "images" in key:
-            return np.max(value) + 1
+            return torch.max(value) + 1
         else:
             return 0
 
-    def __cat_dim__(self, key: str, value: "torch.Tensor", *args, **kwargs):
+    def __cat_dim__(self, key: str, value: torch.Tensor, *args, **kwargs):
         if "index" in key or "face" in key:
             return 1
         else:
@@ -123,18 +122,18 @@ class KIMDriverGraph(ConfigurationTransform):
             PyGGraph object.
         """
         pyg_graph = PyGGraph()
-        pyg_graph.energy = np.array(graph.energy)
-        pyg_graph.forces = np.array(graph.forces)
-        pyg_graph.n_layers = np.array(graph.n_layers)
-        pyg_graph.coords = np.array(graph.coords)
-        pyg_graph.images = np.array(graph.images)
-        pyg_graph.species = np.array(graph.species)
-        pyg_graph.z = np.array(graph.z)
-        pyg_graph.contributions = np.array(graph.contributions)
-        pyg_graph.num_nodes = np.array(graph.n_nodes)
+        pyg_graph.energy = torch.as_tensor(graph.energy)
+        pyg_graph.forces = torch.as_tensor(graph.forces)
+        pyg_graph.n_layers = torch.as_tensor(graph.n_layers)
+        pyg_graph.coords = torch.as_tensor(graph.coords)
+        pyg_graph.images = torch.as_tensor(graph.images)
+        pyg_graph.species = torch.as_tensor(graph.species)
+        pyg_graph.z = torch.as_tensor(graph.z)
+        pyg_graph.contributions = torch.as_tensor(graph.contributions)
+        pyg_graph.num_nodes = torch.as_tensor(graph.n_nodes)
         for i in range(graph.n_layers):
             pyg_graph.__setattr__(
-                f"edge_index{i}", np.array(graph.edge_index[i])
+                f"edge_index{i}", torch.as_tensor(graph.edge_index[i])
             )
         # pyg_graph.coords.requires_grad_(True)
         return pyg_graph
