@@ -20,7 +20,7 @@ if torch_geometric_available():
     torch_geometric_available(),
     "Pytorch Geometric is not available. It is required for PyGGraph.",
 )
-class PyGGraph(Data):
+class PyGGraph:
     """
     A Pytorch Geometric compatible graph representation of a configuration. When loaded
     into a class:`torch_geometric.data.DataLoader` the graphs of type PyGGraph
