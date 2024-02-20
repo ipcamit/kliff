@@ -8,12 +8,12 @@ from kliff.dataset import Configuration
 from kliff.transforms.configuration_transforms import ConfigurationTransform
 from kliff.transforms.configuration_transforms.graphs import graph_module
 from kliff.utils import torch_available, torch_geometric_available
-
-if torch_available():
-    import torch
+#
+# if torch_available():
+#     import torch
 import numpy as np
 
-if torch_geometric_available():
+# if torch_geometric_available():
     # from torch_geometric.data import Data
 
 
