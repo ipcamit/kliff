@@ -14,7 +14,7 @@ if torch_available():
 import numpy as np
 
 if torch_geometric_available():
-    from torch_geometric.data import Data
+    # from torch_geometric.data import Data
 
 
 @requires(
