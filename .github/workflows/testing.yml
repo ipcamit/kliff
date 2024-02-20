@@ -24,9 +24,9 @@ jobs:
         shell: bash -el {0}
         run: |
           conda install -c conda-forge kim-api=2.3 pybind11
-          python -m pip install --upgrade pip
           python -m pip install kimpy
-          python -m pip install .[test]
+          python -m pip install --upgrade pip
+          python -m pip install .[tests2]
 
       - name: Test with pytest
         shell: bash -el {0}
