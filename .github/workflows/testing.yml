@@ -29,7 +29,7 @@ jobs:
         shell: bash -el {0}
         run: |
           conda install -c conda-forge kim-api=2.3 pybind11 kimpy
-          conda install pyg -c pyg
+          conda install pytorch torchvision torchaudio cpuonly -c pytorch
           python -m pip install --upgrade pip
           python -m pip install .[test]
 
