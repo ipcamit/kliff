@@ -29,8 +29,9 @@ jobs:
         shell: bash -el {0}
         run: |
           conda install -c conda-forge kim-api=2.3 pybind11 kimpy
-          conda install pytorch torchvision torchaudio cpuonly -c pytorch
           python -m pip install --upgrade pip
+          pip install torch==1.13.0
+          pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
           python -m pip install .[test]
 
       - name: Test with pytest
