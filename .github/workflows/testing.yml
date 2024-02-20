@@ -11,6 +11,10 @@ jobs:
         python-version: ["3.10"]
 
     steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
       - uses: conda-incubator/setup-miniconda@v3
         with:
           python-versio: ${{ matrix.python-version }}
@@ -26,7 +30,7 @@ jobs:
           conda install -c conda-forge kim-api=2.3 pybind11
           python -m pip install kimpy
           python -m pip install --upgrade pip
-          python -m pip install .[tests2]
+          python -m pip install .[test]
 
       - name: Test with pytest
         shell: bash -el {0}

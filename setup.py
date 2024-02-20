@@ -115,14 +115,6 @@ setup(
     ext_modules=[sym_fn, bispectrum, neighlist, graph_module],
     install_requires=["requests", "scipy", "pyyaml", "monty", "loguru"],
     extras_require={
-        "tests2": [
-            "pytest",
-            "kimpy",
-            "numpy",
-            "ase",
-            "libdescriptor",
-            "torch_geometric",
-        ],
         "test": [
             "pytest",
             "kimpy",
