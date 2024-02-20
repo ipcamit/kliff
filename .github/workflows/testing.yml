@@ -30,6 +30,7 @@ jobs:
         run: |
           conda install -c conda-forge kim-api=2.3 pybind11 kimpy
           python -m pip install --upgrade pip
+          pip install torch==1.13.0+cpu
           python -m pip install .[test]
 
       - name: Test with pytest
