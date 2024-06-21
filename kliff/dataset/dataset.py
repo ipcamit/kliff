@@ -15,6 +15,7 @@ from monty.dev import requires
 from kliff.dataset.extxyz import read_extxyz, write_extxyz
 from kliff.dataset.weight import Weight
 from kliff.utils import stress_to_tensor, stress_to_voigt, to_path
+import lmdb
 
 # For type checking
 if TYPE_CHECKING:
@@ -313,6 +314,52 @@ class Configuration:
             atoms.info["stress"] = stress_to_tensor(self.stress)
         return atoms
 
+    @classmethod
+    def from_lmdb(cls, env: lmdb.Environment, key: str, weight: Optional[Weight] = None , dynamic: bool = False):
+        """
+        Read configuration from lmdb.
+
+        Args:
+            env: lmdb.Environment object.
+            key: key to read the configuration from the lmdb.
+        """
+        if not dynamic:
+            with env.begin() as txn:
+                data = txn.get(key.encode())
+                if data is None:
+                    raise ConfigurationError(f"Key {key} not found in the lmdb.")
+                lmdb_config = dill.loads(data)
+                cell = lmdb_config.get("cell", None)
+                species = lmdb_config.get("atomic_numbers", None)
+                coords = lmdb_config.get("pos", None)
+                PBC = lmdb_config.get("pbc", None)
+                energy = lmdb_config.get("potential-energy", None)
+                forces = lmdb_config.get("forces", None)
+                stress = lmdb_config.get("stress", None)
+                identifier=key
+                weight=weight
+
+                species = [
+                    chemical_symbols[int(i)] for i in species
+                ]
+                PBC = [bool(i) for i in PBC]
+                config = cls(
+                    cell,
+                    species,
+                    coords,
+                    PBC,
+                    energy,
+                    forces,
+                    stress,
+                    weight=weight,
+                    identifier=identifier,
+                )
+
+            return config
+        else:
+            config = Configuration(None, None, None, None, identifier=key)
+            config.metadata = {"lmdb-env": env}
+
     @property
     def cell(self) -> np.ndarray:
         """
@@ -564,6 +611,46 @@ class Configuration:
         else:
             return None
 
+    def to_dict(self):
+        """
+        Return a dictionary representation of the configuration.
+        Returns:
+            A dictionary representation of the configuration.
+        """
+        if self.coords:
+            config_dict = {
+                "cell": self.cell,
+                "species": self.species,
+                "coords": self.coords,
+                "PBC": self.PBC,
+                "energy": self.energy,
+                "forces": self.forces,
+                "stress": self.stress,
+                "identifier": self.identifier,
+            }
+        else: # it might be dynamic lmdb
+            if self.metadata.get("lmdb-env"):
+                try:
+                    data = self.metadata["lmdb-env"].begin().get(self.identifier.encode())
+                    lmdb_config = dill.loads(data)
+                    config_dict = {
+                        "cell": lmdb_config.get("cell", None),
+                        "species": [
+                            chemical_symbols[int(i)] for i in lmdb_config.get("atomic_numbers", None)
+                        ],
+                        "coords": lmdb_config.get("pos", None),
+                        "PBC": lmdb_config.get("pbc", None),
+                        "energy": lmdb_config.get("potential-energy", None),
+                        "forces": lmdb_config.get("forces", None),
+                        "stress": lmdb_config.get("stress", None),
+                        "identifier": self.identifier,
+                    }
+                except Exception as e:
+                    raise ConfigurationError(f"Error reading lmdb: {e}")
+            else:
+                raise ConfigurationError("Configuration does not contain coordinates.")
+        return config_dict
+
 
 class Dataset:
     """
@@ -575,11 +662,11 @@ class Dataset:
 
     def __init__(self, configurations: Iterable = None):
         if configurations is None:
-            self.configs = []
+            self._configs = []
         elif isinstance(configurations, Iterable) and not isinstance(
             configurations, str
         ):
-            self.configs = list(configurations)
+            self._configs = list(configurations)
         else:
             raise DatasetError(
                 "configurations must be a iterable of Configuration objects."
@@ -696,7 +783,7 @@ class Dataset:
         else:
             configs = Dataset._read_from_colabfit(mongo_client, colabfit_dataset, None)
             Dataset.add_weights(configs, weight)
-        self.configs.extend(configs)
+        self._configs.extend(configs)
 
     @classmethod
     def from_path(
@@ -801,7 +888,7 @@ class Dataset:
         else:
             configs = self._read_from_path(path, None, file_format)
             Dataset.add_weights(configs, weight)
-        self.configs.extend(configs)
+        self._configs.extend(configs)
 
     @classmethod
     def from_ase(
@@ -1009,13 +1096,121 @@ class Dataset:
                 path, ase_atoms_list, None, energy_key, forces_key, slices, file_format
             )
             Dataset.add_weights(configs, weight)
-        self.configs.extend(configs)
+        self._configs.extend(configs)
+
+    @classmethod
+    def from_lmdb(cls,  path: Union[Path, str, List[Path], List[str]],
+                        weight: Optional[Union[Weight, Path]],
+                        sharded: bool = False,
+                        dynamic_loading: bool = True,
+                        subdir: bool = False):
+        """
+        Read configurations from LMDB file and append to a dataset.
+
+        Args:
+            path: Path to the LMDB file.
+            weight: an instance that computes the weight of the configuration in the loss
+                function. If a path is provided, it is used to read the weight from the
+                file.  The file must be a plain text file with 4 whitespace separated
+                columns: config_weight, energy_weight, forces_weight, and stress_weight.
+                Length of the file must be equal to the number of configurations, or 1
+                (in which case the same weight is used for all configurations).
+            sharded: Whether the LMDB file is sharded.
+            dynamic_loading: Whether to load the data dynamically.
+            subdir: Whether the data is stored in subdirectories.
+            length: Number of configurations to load.
+        """
+        instance = cls()
+        instance.add_from_lmdb(path, weight, sharded, dynamic_loading, subdir)
+        return instance
+
+    def add_from_lmdb(self, path: Union[Path, str, List[Path], List[str]],
+                      weight: Optional[Union[Weight, Path]],
+                      sharded: bool = False,
+                      dynamic_loading: bool = True,
+                      subdir: bool = False):
+        """
+        Read configurations from LMDB file and append to a dataset.
+
+        Args:
+            path: Path to the LMDB file.
+            weight: an instance that computes the weight of the configuration in the loss
+                function. If a path is provided, it is used to read the weight from the
+                file.  The file must be a plain text file with 4 whitespace separated
+                columns: config_weight, energy_weight, forces_weight, and stress_weight.
+                Length of the file must be equal to the number of configurations, or 1
+                (in which case the same weight is used for all configurations).
+            sharded: Whether the LMDB file is sharded.
+            dynamic_loading: Whether to load the data dynamically.
+            subdir: Whether the data is stored in subdirectories.
+            length: Number of configurations to load.
+        """
+        if isinstance(path, (str, Path)):
+            path = [path]
+
+        for lmdb_path in path:
+            env = lmdb.open(str(lmdb_path), readonly=True, lock=False, subdir=subdir)
+
+            if isinstance(weight, Weight):
+                configs = self._read_from_lmdb(env, weight, sharded, dynamic_loading, subdir)
+            else:
+                configs = self._read_from_lmdb(env, None, sharded, dynamic_loading, subdir)
+                Dataset.add_weights(configs, weight)
+            self._configs.extend(configs)
+
+            # save lmdb env in metadata
+            if dynamic_loading:
+                if self.metadata.get("lmdb_envs"):
+                    self.metadata["lmdb_envs"].append(env)
+                else:
+                    self.add_metadata({"lmdb_envs": [env]})
+            else:
+                env.close()
+
+    @staticmethod
+    def _read_from_lmdb(env: lmdb.Environment,
+                        weight: Optional[Weight],
+                        sharded: bool,
+                        dynamic_loading: bool,
+                        subdir: bool) -> Union[List[Configuration]]:
+        """
+        Read configurations from LMDB file.
+
+        Args:
+            path:
+            weight:
+            sharded:
+            dynamic_loading:
+            subdir:
+            length:
+
+        Returns:
+
+        """
+        with env.begin() as txn:
+            num_keys = txn.stat()["entries"]
+            keys = [key.decode() for key, _ in txn.cursor()]
+
+        if dynamic_loading:
+            configs = [Configuration.from_lmdb(env, key, weight, dynamic=True) for key in keys]
+        else:
+            configs = [Configuration.from_lmdb(env, key, weight, dynamic=False) for key in keys]
+        return configs
+
+    @property
+    def configs(self) -> List[Configuration]:
+        """
+        Return the configurations in the dataset.
+        """
+        if not self._configs:
+            raise DatasetError("No configurations found, maybe you are using dynamic loading?")
+        return self._configs
 
     def get_configs(self) -> List[Configuration]:
         """
         Get shallow copy of the configurations.
         """
-        return self.configs[:]
+        return self._configs[:]
 
     def __len__(self) -> int:
         """
@@ -1025,7 +1220,7 @@ class Dataset:
         Returns:
             Number of configurations in the dataset.
         """
-        return len(self.configs)
+        return len(self._configs)
 
     def __getitem__(
         self, idx: Union[int, np.ndarray, List]
@@ -1041,11 +1236,17 @@ class Dataset:
             The configuration at index `idx` or a new dataset with the configurations at
             the indices.
         """
-        if isinstance(idx, int):
-            return self.configs[idx]
+        if self._metadata.get("dynamic"):
+            if isinstance(idx, int):
+                return self._configs[idx].to_dict()
+            else:
+                configs = [self._configs[i].to_dict() for i in idx]
+                return Dataset(configs)
         else:
-            configs = [self.configs[i] for i in idx]
-            return Dataset(configs)
+            if isinstance(idx, int):
+                return self._configs[idx]
+            else:
+                return Dataset([self._configs[i] for i in idx])
 
     def save_weights(self, path: Union[Path, str]):
         """
@@ -1056,7 +1257,7 @@ class Dataset:
         """
         path = to_path(path)
         with path.open("w") as f:
-            for config in self.configs:
+            for config in self._configs:
                 f.write(
                     f"{config.weight.config_weight} "
                     + f"{config.weight.energy_weight} "
@@ -1142,7 +1343,7 @@ class Dataset:
         """
         if not isinstance(metadata, dict):
             raise DatasetError("metadata must be a dictionary.")
-        self._metadata.update(metadata)
+        self._metadata |= metadata
 
     def get_metadata(self, key: str):
         """
@@ -1181,7 +1382,7 @@ class Dataset:
             return
 
         property_list = list(copy.deepcopy(properties))  # make it mutable, if not
-        for config in self.configs:
+        for config in self._configs:
             for prop in property_list:
                 try:
                     getattr(config, prop)
@@ -1321,6 +1522,11 @@ class Dataset:
             raise DatasetError(f"Dataset type {dataset_type} not supported.")
 
         return dataset
+
+    def __del__(self):
+        if self.metadata.get("lmdb_envs"):
+            for env in self.metadata["lmdb_envs"]:
+                env.close()
 
 
 class ConfigurationError(Exception):

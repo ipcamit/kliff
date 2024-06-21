@@ -436,7 +436,7 @@ class Trainer:
         )
         self.dataset = deepcopy(dataset_list[0])
         for ds in dataset_list[1:]:
-            self.dataset.configs.extend(ds)
+            self.dataset._configs.extend(ds)
 
     def save_config(self):
         """
