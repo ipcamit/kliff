@@ -18,4 +18,3 @@ Added changes and capabilities:
 - fp16 and fp32 support
 
 Added changes will percolate back to original KLIFF repository if needed.
-
