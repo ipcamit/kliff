@@ -417,7 +417,7 @@ class GNNLightningTrainer(Trainer):
             logger=[self.tb_logger, self.csv_logger],
             max_epochs=self.optimizer_manifest["epochs"],
             accelerator="auto",
-            strategy="ddp",
+            strategy="auto",
             callbacks=self.callbacks,
             num_nodes=num_nodes,
             # precision=32
