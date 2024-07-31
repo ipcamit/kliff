@@ -196,6 +196,7 @@ class DescriptorDataset(TorchDataset):
         coords_0 = np.array(config_0["coords"])
         descriptors_0 = np.array(config_0["descriptor"])
         contribution_0 = np.zeros(descriptors_0.shape[0], dtype=np.intc)
+        index_0 = np.array([config_0["index"]], dtype=np.intc)
         batch_len = len(batch)
         ptr_shift = np.array(coords_0.shape[0], dtype=np.intc)
 
@@ -240,6 +241,9 @@ class DescriptorDataset(TorchDataset):
             contribution_0 = np.concatenate(
                 (contribution_0, np.array(contribution_i)), axis=0
             )
+            index_0 = np.concatenate(
+                (index_0, np.array([config_i["index"]], dtype=np.intc)), axis=0
+            )
 
             for prop in self.consistent_properties:
                 property_dict_0[prop] = np.vstack(
@@ -261,6 +265,7 @@ class DescriptorDataset(TorchDataset):
             "property_dict": property_dict_0,
             "ptr": ptr,
             "contribution": contribution_0,
+            "index": index_0,
         }
 
     def add_transform(self, transform: Descriptor):

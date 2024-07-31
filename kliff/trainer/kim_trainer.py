@@ -123,6 +123,12 @@ class KIMTrainer(Trainer):
                 compute_stress=compute_stress,
             )
 
+            if self.current["log_per_atom_pred"]:
+                self.log_per_atom_outputs(self.current["epoch"],
+                                          [configuration.metadata.get("index")],
+                                          [prediction["forces"]]
+                                          )
+
             if configuration.weight.energy_weight:
                 loss += configuration.weight.energy_weight * self.loss_function(
                     prediction["energy"], configuration.energy
@@ -137,6 +143,7 @@ class KIMTrainer(Trainer):
                 )
             loss *= configuration.weight.config_weight
 
+        self.current["epoch"] += 1
         return loss
 
     def checkpoint(self, *args, **kwargs):

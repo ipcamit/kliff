@@ -1,6 +1,8 @@
 import os
 
-import dill
+import pickle as pkl
+from typing import Any, Union
+
 import pytorch_lightning as pl
 import torch
 
@@ -45,26 +47,16 @@ class SaveModelCallback(pl.Callback):
         trainer.save_checkpoint(os.path.join(self.ckpt_dir, "trainer_checkpoint.ckpt"))
 
 
-class LossTrajectoryCallback(pl.Callback):
+class SavePerAtomPredictions(pl.Callback):
     """
-    Callback to save the loss trajectory of the model during validation. The loss trajectory is saved in the
-    loss_traj_file. The loss trajectory is saved every ckpt_interval epochs. Currently, it only logs per atom force loss.
+    Callback to save the per atom predictions of the model during validation. The per
+    atom predictions are saved in the supplied lmdb file. Usually it is named
+    `per_atom_pred_database.lmdb` in the run dir
     """
-
-    def __init__(self, loss_traj_folder, val_dataset: Dataset, ckpt_interval=10):
+    def __init__(self, lmdb_file_handle, ckpt_interval):
         super().__init__()
-        self.loss_traj_folder = loss_traj_folder
+        self.lmdb_file_handle = lmdb_file_handle
         self.ckpt_interval = ckpt_interval
-
-        os.makedirs(self.loss_traj_folder, exist_ok=True)
-        with open(os.path.join(self.loss_traj_folder, "loss_traj_idx.csv"), "w") as f:
-            f.write("epoch,loss\n")
-
-        dill.dump(
-            val_dataset,
-            open(os.path.join(self.loss_traj_folder, "val_dataset.pkl"), "wb"),
-        )
-        self.val_losses = []
 
     def on_validation_batch_end(
         self,
@@ -76,17 +68,50 @@ class LossTrajectoryCallback(pl.Callback):
         dataloader_idx=0,
     ):
         if trainer.current_epoch % self.ckpt_interval == 0:
-            val_force_loss = outputs["per_atom_force_loss"].detach().cpu().numpy()
-            self.val_losses.extend(val_force_loss)
+            epoch = trainer.current_epoch
+            predicted_forces = outputs["per_atom_pred"]
+            self._log_per_atom_outputs(epoch, batch, predicted_forces)
 
-    def on_validation_epoch_end(self, trainer, pl_module):
+    def on_train_batch_end(
+        self,
+        trainer: "pl.Trainer",
+        pl_module: "pl.LightningModule",
+        outputs: Any,
+        batch: Any,
+        batch_idx: int,
+        dataloader_idx: int = 0,
+    ) -> None:
         if trainer.current_epoch % self.ckpt_interval == 0:
-            with open(
-                os.path.join(self.loss_traj_folder, "loss_traj_idx.csv"), "a"
-            ) as f:
-                loss_str = ",".join(
-                    [str(trainer.current_epoch)]
-                    + [f"{loss:.5f}" for loss in self.val_losses]
-                )
-                f.write(f"{loss_str}\n")
-            self.val_losses = []
+            epoch = trainer.current_epoch
+            predicted_forces = outputs["per_atom_pred"]
+            self._log_per_atom_outputs(epoch, batch, predicted_forces)
+
+    def _log_per_atom_outputs(self, epoch: Union[int, torch.Tensor], batch: Any, predicted_forces: torch.Tensor):
+        """
+        This function is duplicate of ~:class:`kliff.trainer.Trainer.log_per_atom_outputs`.
+
+        Args:
+            epoch: Current epoch
+            idxs: Index of the configurations
+            predicted_forces: Predicted forces
+        """
+        with self.lmdb_file_handle.begin(write=True) as txn:
+            idxs = batch["idx"]
+            n_configs = len(idxs)
+
+            from_ = 0
+            to_ = -1
+
+            for i in range(n_configs):
+                # get the prediction pointer, every even index is contributing
+                n_atoms = (batch["contributions"][batch["contributions"] == (2*i)]).shape[0]
+                to_ = from_ + n_atoms
+                pred = predicted_forces[from_:to_].detach().cpu().numpy()
+                from_ = to_
+
+                # save the predictions
+                txn.put(f"epoch_{epoch}|index_{idxs[i]}".encode(),
+                        pkl.dumps({"pred_0": pred, "n_atoms": n_atoms}))
+
+
+# TODO: LTAU callback?

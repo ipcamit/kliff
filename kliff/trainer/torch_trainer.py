@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader as TorchDataLoader
 from torch_scatter import scatter_add
 
 from .base_trainer import Trainer, TrainerError
-from .torch_trainer_utils.dataloaders import DescriptorDataset
+from .utils.dataloaders import DescriptorDataset
 
 if TYPE_CHECKING:
     from kliff.transforms.configuration_transforms import Descriptor
@@ -337,6 +337,7 @@ class DNNTrainer(Trainer):
         properties = batch["property_dict"]
         contribution = batch["contribution"]
         ptr = batch["ptr"]
+        indexes = batch["index"]
 
         descriptor_tensor = torch.tensor(
             descriptors,
@@ -359,8 +360,6 @@ class DNNTrainer(Trainer):
                 properties["energy"], dtype=self.dtype, device=self.current["device"]
             ),
         )  # energy will always be present for conservative models
-        # TODO: Add per component loss extraction
-        # TODO: Add per configuration loss extraction
 
         if self.loss_manifest["weights"]["energy"]:
             loss = loss * self.loss_manifest["weights"]["energy"]
@@ -406,12 +405,27 @@ class DNNTrainer(Trainer):
             ptr_tensor = torch.tensor(
                 ptr, device=self.current["device"], dtype=torch.int64
             )
-            for i in range(len(ptr_tensor) - 1):
+
+            # TODO: See if we can do without the triple if condition
+            if (self.current["log_per_atom_pred"] and
+                    (self.current["epoch"] % self.current["ckpt_interval"] == 0)):
+                per_atom_pred = []
+
+            for i in range(len(ptr_tensor)):
                 from_ = torch.sum(n_atoms_tensor[:i])
                 to_ = from_ + n_atoms_tensor[i]
                 forces_predicted[from_:to_] = force_summed[
                     ptr_tensor[i] : ptr_tensor[i] + n_atoms_tensor[i]
                 ]
+                if (self.current["log_per_atom_pred"] and
+                        (self.current["epoch"] % self.current["ckpt_interval"] == 0)):
+                    per_atom_pred.append(
+                        forces_predicted[from_:to_].detach().cpu().numpy()
+                    )
+
+            if (self.current["log_per_atom_pred"] and
+                    (self.current["epoch"] % self.current["ckpt_interval"] == 0)):
+                self.log_per_atom_outputs(self.current["epoch"], indexes, per_atom_pred)
 
             loss_forces = self.loss(
                 forces_predicted,
@@ -421,7 +435,6 @@ class DNNTrainer(Trainer):
                     dtype=self.dtype,
                 ),
             )
-            # TODO: Add force loss dump feature for Josh's UQ
             loss = loss + loss_forces * self.loss_manifest["weights"]["forces"]
             # TODO: Discuss and check if this is correct
             # F = - ∂E/∂r, ℒ = f(E, F)
@@ -474,6 +487,7 @@ class DNNTrainer(Trainer):
             self.load_checkpoint(self.get_last_checkpoint())
 
         for epoch in range(self.optimizer_manifest["epochs"]):
+            self.current["epoch"] = epoch
             epoch_train_loss = 0.0
             self.model.train()
             for i, batch in enumerate(self.train_dataloader):
@@ -503,9 +517,12 @@ class DNNTrainer(Trainer):
             self.current["step"] += 1
             logger.info(f"Epoch {epoch} completed. Train loss: {epoch_train_loss}")
 
-            # create .finished file to indicate that training is done
-            with open(f"{self.current['run_dir']}/.finished", "w") as f:
-                f.write("")
+        # create .finished file to indicate that training is done
+        with open(f"{self.current['run_dir']}/.finished", "w") as f:
+            f.write("")
+            if self.current["log_per_atom_pred"]:
+                # close LMDB file
+                self.current["per_atom_pred_database"].close()
 
     # model io #####################################################################
     def setup_model(self):

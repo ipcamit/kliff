@@ -466,7 +466,7 @@ class Configuration:
         """
         Set the metadata of the configuration.
         """
-        self._metadata = metadata
+        self._metadata |= metadata
 
     def get_num_atoms(self) -> int:
         """
