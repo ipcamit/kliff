@@ -108,6 +108,7 @@ class LightningTrainerWrapper(pl.LightningModule):
             partial forces, and hence needs to be summed to the contributing particles.
 
         """
+
         batch["coords"].requires_grad_(True)
         model_inputs = {k: batch[k] for k in self.input_args}
         predicted_energy = self.model(**model_inputs)
@@ -362,6 +363,7 @@ class GNNLightningTrainer(Trainer):
         else:
             num_workers = os.getenv("SLURM_CPUS_PER_TASK", 1)
 
+        logger.log(f"Number of workers: {num_workers}")
         self.data_module = LightningDataset(
             self.train_dataset,
             self.val_dataset,

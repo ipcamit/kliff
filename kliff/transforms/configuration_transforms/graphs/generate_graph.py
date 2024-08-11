@@ -48,6 +48,7 @@ class PyGGraph(Data):
         self.z = None
         self.cell = None
         self.contributions = None
+        self.ds_idx = 0
 
     def __inc__(self, key: str, value: torch.Tensor, *args, **kwargs):
         if "index" in key or "face" in key:
@@ -77,6 +78,7 @@ class PyGGraph(Data):
             PyGGraph object.
         """
         graph = cls()
+        print(graph, mapping)
         for key, value in mapping.items():
             setattr(graph, key, torch.as_tensor(value))
         return graph
@@ -144,10 +146,11 @@ class KIMDriverGraph(ConfigurationTransform):
         )
         graph.energy = configuration.energy
         graph.forces = configuration.forces
-        return self.to_py_graph(graph)
+        ds_idx = configuration.metadata.get("ds_idx", 0)
+        return self.to_py_graph(graph, ds_idx=ds_idx)
 
     @staticmethod
-    def to_py_graph(graph: graph_module.GraphData) -> PyGGraph:
+    def to_py_graph(graph: graph_module.GraphData, ds_idx=0) -> PyGGraph:
         """
         Convert a C++ graph object to a KLIFF Geometric Graph Data object, ``GraphData``.
 
@@ -168,6 +171,7 @@ class KIMDriverGraph(ConfigurationTransform):
         pyg_graph.cell = torch.as_tensor(graph.cell)
         pyg_graph.contributions = torch.as_tensor(graph.contributions)
         pyg_graph.num_nodes = torch.as_tensor(graph.n_nodes)
+        pyg_graph.ds_idx = ds_idx
         for i in range(graph.n_layers):
             pyg_graph.__setattr__(
                 f"edge_index{i}", torch.as_tensor(graph.edge_index[i])

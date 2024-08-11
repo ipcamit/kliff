@@ -428,15 +428,16 @@ class Trainer:
         """
         dataset_module_manifest = deepcopy(self.dataset_manifest)
         dataset_module_manifest["weights"] = self.loss_manifest["weights"]
-        dataset_list = _parallel_read(
-            self.dataset_manifest["path"],
-            num_chunks=self.optimizer_manifest["num_workers"],
-            energy_key=self.dataset_manifest.get("keys", {}).get("energy", "energy"),
-            forces_key=self.dataset_manifest.get("keys", {}).get("forces", "forces"),
-        )
-        self.dataset = deepcopy(dataset_list[0])
-        for ds in dataset_list[1:]:
-            self.dataset._configs.extend(ds)
+        self.dataset = Dataset.get_dataset_from_manifest(dataset_module_manifest)
+        # dataset_list = _parallel_read(
+        #     self.dataset_manifest["path"],
+        #     num_chunks=self.optimizer_manifest["num_workers"],
+        #     energy_key=self.dataset_manifest.get("keys", {}).get("energy", "energy"),
+        #     forces_key=self.dataset_manifest.get("keys", {}).get("forces", "forces"),
+        # )
+        # self.dataset = deepcopy(dataset_list[0])
+        # for ds in dataset_list[1:]:
+        #     self.dataset._configs.extend(ds)
 
     def save_config(self):
         """
@@ -606,7 +607,7 @@ class Trainer:
             TrainerError(f"Could not load indices from {train_indices}.")
 
         if train_indices is None:
-            indices = np.random.permutation(train_size + val_size)
+            indices = np.random.randint(0, len(self.dataset), train_size + val_size)
             train_indices = indices[:train_size]
             if val_size > 0:
                 val_indices = indices[-val_size:]

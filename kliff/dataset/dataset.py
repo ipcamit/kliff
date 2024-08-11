@@ -341,8 +341,9 @@ class Configuration:
                 coords = lmdb_config.get("pos", None)
                 PBC = lmdb_config.get("pbc", None)
                 energy = lmdb_config.get("potential-energy", None)
-                forces = lmdb_config.get("forces", None)
+                forces = lmdb_config.get("force", None)
                 stress = lmdb_config.get("stress", None)
+                ds_idx = lmdb_config.get("ds_idx", 0)
                 identifier = key
                 weight = weight
 
@@ -359,7 +360,7 @@ class Configuration:
                     weight=weight,
                     identifier=identifier,
                 )
-
+                config.metadata |= {"ds_idx": ds_idx}
             return config
         else:
             config = Configuration(None, None, None, None, identifier=key)
@@ -1186,7 +1187,7 @@ class Dataset:
 
                 if self.metadata.get("master_lmdb", None) is None:
                     master_lmdb_file = "kliff_dataset_master.lmdb"
-                    master_env = lmdb.open(master_lmdb_file, readonly=False, lock=False)
+                    master_env = lmdb.open(master_lmdb_file, readonly=False, lock=False, map_size=int(1e12))
                     self.metadata["master_lmdb"] = master_lmdb_file
                     self.metadata["master_env"] = master_env
 
@@ -1518,6 +1519,15 @@ class Dataset:
                     dataset_name:
                     database_name:
                     database_url:
+
+            4. Manifest file for initializing dataset using LMDB:
+            ```yaml
+            dataset:
+                type: lmdb          # ase or path or colabfit
+                lmbd_paths:         # Path to the lmdb file
+                    - /path/to/lmdb
+                    - /path/to/lmdb
+                dynamic_loading: True
             ```
 
 
@@ -1532,6 +1542,7 @@ class Dataset:
             dataset_type != "ase"
             and dataset_type != "path"
             and dataset_type != "colabfit"
+            and dataset_type != "lmdb"
         ):
             raise DatasetError(f"Dataset type {dataset_type} not supported.")
         weights = dataset_manifest.get("weights", None)
@@ -1558,7 +1569,7 @@ class Dataset:
         elif dataset_type == "path":
             dataset = Dataset.from_path(
                 path=dataset_manifest.get("path", "."),
-                weight=weights,
+                # TODO: Weights are not implemented for path yet
             )
         elif dataset_type == "colabfit":
             try:
@@ -1574,6 +1585,11 @@ class Dataset:
                 colabfit_database=colabfit_database,
                 colabfit_dataset=colabfit_dataset,
                 colabfit_uri=colabfit_uri,
+                weight=weights,
+            )
+        elif dataset_type == "lmdb":
+            dataset = Dataset.from_lmdb(
+                path=dataset_manifest.get("lmdb_paths", []),
                 weight=weights,
             )
         else:
