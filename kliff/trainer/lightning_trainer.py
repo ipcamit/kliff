@@ -363,7 +363,7 @@ class GNNLightningTrainer(Trainer):
         else:
             num_workers = os.getenv("SLURM_CPUS_PER_TASK", 1)
 
-        logger.log(f"Number of workers: {num_workers}")
+        logger.info(f"Number of workers: {num_workers}")
         self.data_module = LightningDataset(
             self.train_dataset,
             self.val_dataset,
