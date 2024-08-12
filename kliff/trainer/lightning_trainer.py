@@ -144,9 +144,9 @@ class LightningTrainerWrapper(pl.LightningModule):
 
         predicted_energy, predicted_forces = self.forward(batch)
 
-        loss = energy_weight * F.mse_loss(
+        loss = F.mse_loss(
             predicted_energy.squeeze(), target_energy.squeeze()
-        ) + forces_weight * F.mse_loss(
+        ) + F.mse_loss(
             predicted_forces.squeeze(), target_forces.squeeze()
         )
         self.log(
@@ -207,6 +207,8 @@ class LightningTrainerWrapper(pl.LightningModule):
         energy_weight = self.energy_weight
         forces_weight = self.forces_weight
 
+        #TODO enable energy forces weights again
+
         predicted_energy, predicted_forces = self.forward(batch)
 
         per_atom_force_loss = torch.sum(
@@ -214,9 +216,9 @@ class LightningTrainerWrapper(pl.LightningModule):
         )
 
         loss = (
-            energy_weight
-            * F.mse_loss(predicted_energy.squeeze(), target_energy.squeeze())
-            + forces_weight * torch.mean(per_atom_force_loss) / 3
+
+            F.mse_loss(predicted_energy.squeeze(), target_energy.squeeze())
+            +  torch.mean(per_atom_force_loss) / 3
         )  # divide by 3 to get correct MSE
 
         self.log(
@@ -361,7 +363,7 @@ class GNNLightningTrainer(Trainer):
         if self.optimizer_manifest["num_workers"]:
             num_workers = self.optimizer_manifest["num_workers"]
         else:
-            num_workers = os.getenv("SLURM_CPUS_PER_TASK", 1)
+            num_workers = int(os.getenv("SLURM_CPUS_PER_TASK", "1"))
 
         logger.info(f"Number of workers: {num_workers}")
         self.data_module = LightningDataset(
