@@ -14,6 +14,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <memory>
 #include <set>
 
 #include <pybind11/pybind11.h>
@@ -43,6 +44,7 @@ struct GraphData{
     py::array_t<int64_t> z; // atomic number of the atoms
     py::array_t<double> cell; // cell of the system
     py::array_t<int64_t> contributions; // contributing of the atoms to the energy
+    py::array_t<double> shifts; // shifts of the atoms, for MIC graphs
 };
 
 // Quick and dirty
@@ -272,6 +274,122 @@ GraphData get_complete_graph(
     return gs;
 }
 
+GraphData get_mic_graph(
+    double cutoff,
+    const std::vector<std::string>& element_list,
+    py::array_t<double> coords_in,
+    py::array_t<double> cell,
+    py::array_t<int> pbc)
+{
+    int n_atoms = static_cast<int>(element_list.size());
+    std::vector<int> species_code;
+    species_code.reserve(n_atoms);
+    for (auto elem : element_list) {
+        species_code.push_back(get_z(elem));
+    }
+
+    int n_pad;
+    std::vector<double> pad_coords;
+    std::vector<int> pad_species;
+    std::vector<int> pad_image;
+
+    NeighList* nl;
+    nbl_initialize(&nl);
+    nbl_create_paddings(n_atoms,
+                        cutoff,
+                        cell.data(),
+                        pbc.data(),
+                        coords_in.data(),
+                        species_code.data(),
+                        n_pad,
+                        pad_coords,
+                        pad_species,
+                        pad_image);
+
+    auto padded_coords = std::make_unique<double[]>((n_atoms + n_pad) * 3);
+    auto padded_species = std::make_unique<int[]>(n_atoms + n_pad);
+    auto need_neigh = std::make_unique<int[]>(n_atoms + n_pad);
+    auto padded_images = std::make_unique<int[]>(n_atoms + n_pad);
+
+    std::copy_n(coords_in.data(), n_atoms * 3, padded_coords.get());
+    std::copy_n(species_code.data(), n_atoms, padded_species.get());
+    std::fill_n(need_neigh.get(), n_atoms, 1);
+    std::iota(padded_images.get(), padded_images.get() + n_atoms, 0);
+
+    for (int i = 0; i < n_pad; ++i) {
+        std::copy_n(&pad_coords[i * 3], 3, &padded_coords[(n_atoms + i) * 3]);
+        padded_species[n_atoms + i] = pad_species[i];
+        need_neigh[n_atoms + i] = 0;
+        padded_images[n_atoms + i] = pad_image[i];
+    }
+
+    nbl_build(nl, n_atoms + n_pad, padded_coords.get(), cutoff, 1, &cutoff, need_neigh.get());
+
+    std::vector<std::set<std::tuple<int64_t, int64_t>>> unrolled_graph(1);
+
+    for (int i = 0; i < n_atoms; ++i) {
+        int number_of_neighbors;
+        const int* neighbors;
+        nbl_get_neigh(nl, 1, &cutoff, 0, i, &number_of_neighbors, &neighbors);
+        for (int j = 0; j < number_of_neighbors; ++j) {
+            unrolled_graph[0].insert({i, neighbors[j]});
+            unrolled_graph[0].insert({neighbors[j], i});
+        }
+    }
+
+    int64_t ** graph_edge_indices = new int64_t *[1];
+    graph_set_to_graph_array(unrolled_graph, graph_edge_indices);
+
+    int n_edges = static_cast<int>(unrolled_graph[0].size());
+    auto shifts = py::array_t<double>({n_edges, 3});
+    auto shifts_ptr = shifts.mutable_data();
+
+    for (int i = 0; i < n_edges; ++i) {
+        std::array<int64_t, 2> edge = {graph_edge_indices[0][i], graph_edge_indices[0][i + n_edges]};
+        for (int j = 0; j < 3; ++j) {
+            shifts_ptr[i * 3 + j] = padded_coords[edge[1] * 3 + j] - padded_coords[edge[0] * 3 + j] -
+                                    padded_coords[padded_images[edge[1]] * 3 + j] + padded_coords[padded_images[edge[0]] * 3 + j];
+        }
+        graph_edge_indices[0][i] = padded_images[edge[0]];
+        graph_edge_indices[0][i + n_edges] = padded_images[edge[1]];
+    }
+
+    std::set<int64_t> unique_species(species_code.begin(), species_code.end());
+    std::map<int64_t, int64_t> species_map;
+    int64_t species_index = 0;
+    for (auto species : unique_species) {
+        species_map[species] = species_index++;
+    }
+    // cast vector  to int_64
+    auto species_code_64 = std::vector<int64_t>(species_code.begin(), species_code.end());
+
+    auto species_code_mapped = py::array_t<int64_t>(n_atoms);
+    auto species_code_mapped_ptr = species_code_mapped.mutable_data();
+    for (int i = 0; i < n_atoms; ++i) {
+        species_code_mapped_ptr[i] = species_map[species_code[i]];
+    }
+
+    std::vector<int64_t> contributions(n_atoms, 1);
+
+    GraphData graph_data;
+    graph_data.n_layers = 1;
+    graph_data.n_nodes = n_atoms;
+    graph_data.edge_index.push_back(py::array_t<int64_t>({2, n_edges}, graph_edge_indices[0]));
+    graph_data.coords = coords_in;
+    graph_data.cell = cell;
+    graph_data.z = py::array_t<int64_t>(n_atoms, species_code_64.data());
+    graph_data.species = species_code_mapped;
+    graph_data.contributions = py::array_t<int64_t>(n_atoms, contributions.data());
+    graph_data.shifts = shifts;
+
+
+    delete[] graph_edge_indices[0];
+    delete[] graph_edge_indices;
+
+    nbl_clean(&nl);
+
+    return graph_data;
+}
 
 PYBIND11_MODULE(graph_module, m)
 {
@@ -287,7 +405,8 @@ PYBIND11_MODULE(graph_module, m)
         .def_readwrite("species", &GraphData::species)
         .def_readwrite("z", &GraphData::z)
         .def_readwrite("cell", &GraphData::cell)
-        .def_readwrite("contributions", &GraphData::contributions);
+        .def_readwrite("contributions", &GraphData::contributions)
+        .def_readwrite("shifts", &GraphData::shifts);
     m.def("get_complete_graph",
             &get_complete_graph,
             py::arg("n_graph_layers"),
@@ -297,4 +416,12 @@ PYBIND11_MODULE(graph_module, m)
             py::arg("cell"),
             py::arg("pbc"),
             "gets complete graphs of configurations");
+    m.def("get_mic_graph",
+            &get_mic_graph,
+            py::arg("cutoff"),
+            py::arg("element_list"),
+            py::arg("coords_in"),
+            py::arg("cell"),
+            py::arg("pbc"),
+            "gets mic graphs of configurations");
 }
