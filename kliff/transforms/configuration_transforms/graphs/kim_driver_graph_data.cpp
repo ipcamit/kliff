@@ -369,7 +369,9 @@ GraphData get_mic_graph(
         species_code_mapped_ptr[i] = species_map[species_code[i]];
     }
 
-    std::vector<int64_t> contributions(n_atoms, 1);
+    std::vector<int64_t> contributions(n_atoms, 0); // all atoms contribute to the energy
+    std::vector<int64_t> images(n_atoms, 0);
+    std::iota(images.begin(), images.end(), 0);
 
     GraphData graph_data;
     graph_data.n_layers = 1;
@@ -381,6 +383,7 @@ GraphData get_mic_graph(
     graph_data.species = species_code_mapped;
     graph_data.contributions = py::array_t<int64_t>(n_atoms, contributions.data());
     graph_data.shifts = shifts;
+    graph_data.images = py::array_t<int64_t>(n_atoms, images.data());
 
 
     delete[] graph_edge_indices[0];

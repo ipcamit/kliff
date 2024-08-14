@@ -54,7 +54,8 @@ class PyGGraph(Data):
         if "index" in key or "face" in key:
             return self.num_nodes
         elif "contributions" in key:
-            return 2
+            # number of unique contributions
+            return torch.unique(value).size(0)
         elif "images" in key:
             return torch.max(value) + 1
         else:
@@ -78,7 +79,6 @@ class PyGGraph(Data):
             PyGGraph object.
         """
         graph = cls()
-        print(graph, mapping)
         for key, value in mapping.items():
             setattr(graph, key, torch.as_tensor(value))
         return graph
@@ -109,6 +109,7 @@ class KIMDriverGraph(ConfigurationTransform):
         n_layers (int): Number of convolution layers.
         copy_to_config (bool): If True, the graph will be copied to
             the Configuration object's fingerprint attribute.
+        mic (bool): If True, the minimum image convention will be applied to the coordinates.
     """
 
     def __init__(
@@ -117,6 +118,7 @@ class KIMDriverGraph(ConfigurationTransform):
         cutoff: float,
         n_layers: int,
         copy_to_config: bool = False,
+        mic: bool = False,
     ):
         super().__init__(copy_to_config=copy_to_config)
         self.species = species
@@ -124,8 +126,9 @@ class KIMDriverGraph(ConfigurationTransform):
         self.n_layers = n_layers
         self.infl_dist = n_layers * cutoff
         self._tg = graph_module
+        self.mic = mic
 
-    def forward(self, configuration: Configuration, mic: bool = False) -> PyGGraph:
+    def forward(self, configuration: Configuration) -> PyGGraph:
         """
         Generate a graph representation of a configuration.
 
@@ -137,7 +140,7 @@ class KIMDriverGraph(ConfigurationTransform):
         Returns:
             C++ custom graph object or Pytorch Geometric Data object.
         """
-        if mic:
+        if self.mic:
             graph = graph_module.get_mic_graph(
                 self.cutoff,
                 configuration.species,
@@ -158,7 +161,7 @@ class KIMDriverGraph(ConfigurationTransform):
         graph.forces = configuration.forces
         ds_idx = configuration.metadata.get("ds_idx", 0)
         pyg_graph = self.to_py_graph(graph, ds_idx=ds_idx)
-        if mic:
+        if self.mic:
             pyg_graph.shifts = torch.as_tensor(graph.shifts)
         return pyg_graph
 
@@ -195,7 +198,7 @@ class KIMDriverGraph(ConfigurationTransform):
     def __call__(
         self, configuration: Configuration, return_extended_state=False
     ) -> PyGGraph:
-        graph = self.forward(configuration)
+        graph = self.forward(configuration, )
         if return_extended_state:
             graph = graph.to_dict()
         if self.copy_to_config:
