@@ -119,29 +119,42 @@ class RadialGraph(ConfigurationTransform):
         self.infl_dist = n_layers * cutoff
         self._tg = graph_module
 
-    def forward(self, configuration: Configuration) -> PyGGraph:
+    def forward(self, configuration: Configuration, mic: bool = False) -> PyGGraph:
         """
         Generate a graph representation of a configuration.
 
         Args:
             configuration: Instance of ~:class:`kliff.dataset.Configuration`. For which the
                 graph representation is to be generated.
+            mic: If True, the minimum image convention will be applied to the coordinates.
 
         Returns:
             C++ custom graph object or Pytorch Geometric Data object.
         """
-        graph = graph_module.get_complete_graph(
-            self.n_layers,
-            self.cutoff,
-            configuration.species,
-            configuration.coords,
-            configuration.cell,
-            configuration.PBC,
-        )
+        if mic:
+            graph = graph_module.get_mic_graph(
+                self.cutoff,
+                configuration.species,
+                configuration.coords,
+                configuration.cell,
+                configuration.PBC,
+            )
+        else:
+            graph = graph_module.get_complete_graph(
+                self.n_layers,
+                self.cutoff,
+                configuration.species,
+                configuration.coords,
+                configuration.cell,
+                configuration.PBC,
+            )
         graph.energy = configuration.energy
         graph.forces = configuration.forces
         graph.idx = configuration.metadata.get("index", -1)
-        return self.to_py_graph(graph)
+        pyg_graph = self.to_py_graph(graph)
+        if mic:
+            pyg_graph.shifts = torch.as_tensor(graph.shifts)
+        return pyg_graph
 
     @staticmethod
     def to_py_graph(graph: graph_module.GraphData) -> PyGGraph:
