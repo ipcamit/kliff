@@ -10,6 +10,7 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from loguru import logger
+from torch import distributed as dist
 from torch_scatter import scatter_add
 
 from .base_trainer import Trainer, TrainerError
@@ -146,9 +147,7 @@ class LightningTrainerWrapper(pl.LightningModule):
 
         loss = F.mse_loss(
             predicted_energy.squeeze(), target_energy.squeeze()
-        ) + F.mse_loss(
-            predicted_forces.squeeze(), target_forces.squeeze()
-        )
+        ) + F.mse_loss(predicted_forces.squeeze(), target_forces.squeeze())
         self.log(
             "train_loss",
             loss,
@@ -207,7 +206,7 @@ class LightningTrainerWrapper(pl.LightningModule):
         energy_weight = self.energy_weight
         forces_weight = self.forces_weight
 
-        #TODO enable energy forces weights again
+        # TODO enable energy forces weights again
 
         predicted_energy, predicted_forces = self.forward(batch)
 
@@ -216,9 +215,8 @@ class LightningTrainerWrapper(pl.LightningModule):
         )
 
         loss = (
-
             F.mse_loss(predicted_energy.squeeze(), target_energy.squeeze())
-            +  torch.mean(per_atom_force_loss) / 3
+            + torch.mean(per_atom_force_loss) / 3
         )  # divide by 3 to get correct MSE
 
         self.log(
@@ -516,3 +514,42 @@ class GNNLightningTrainer(Trainer):
     def setup_optimizer(self):
         # Not needed as Pytorch Lightning handles the optimizer
         pass
+
+    def setup_dataset(self):
+        """ """
+        is_distributed = os.getenv("WORLD_SIZE", False)
+
+        if is_distributed:
+            logger.info("Distributed training detected, setting up dataset ...")
+            if not dist.is_initialized():
+                if dist.is_nccl_available():
+                    dist.init_process_group("nccl")
+                else:
+                    dist.init_process_group("gloo")  # MPI?
+
+            shared_fs = False
+            if dist.get_rank() == 0:
+                with open(self.dataset_manifest["path"] + ".shared_check", "w") as f:
+                    f.write("True")
+
+            dist.barrier()
+            # check if all other ranks share the file system
+            if dist.get_rank() != 0:
+                if os.path.exists(self.dataset_manifest["path"] + ".shared_check"):
+                    shared_fs = True
+
+            if not shared_fs:
+                super().setup_dataset()  # everyone get own dataset
+            dist.barrier()  # let rank 0 and all catch up
+
+            if shared_fs:  # all shared except rank 0
+                # save triggers reuse of the shared master dataset
+                self.dataset_manifest["save"] = True
+                logger.info(
+                    f"Shared dataset detected, setting up dataset on rank {dist.get_rank()}"
+                )
+
+            dist.barrier()  # final sync
+        else:
+            logger.info("Non-distributed training detected, setting up dataset ...")
+            super().setup_dataset()

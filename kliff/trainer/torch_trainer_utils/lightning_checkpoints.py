@@ -90,3 +90,23 @@ class LossTrajectoryCallback(pl.Callback):
                 )
                 f.write(f"{loss_str}\n")
             self.val_losses = []
+
+
+#
+# class PrepareDatasetRankZeroCallback(pl.Callback):
+#     """
+#     Callback to prepare the dataset in rank 0 process. This is useful when the dataset is large and
+#     the dataset preparation is done in the main process. This callback should be added to the trainer
+#     before the `pl.callbacks.ModelCheckpoint` callback.
+#     """
+#     def __init__(self, dataset_manifest):
+#         super().__init__()
+#         self.dataset_manifest = dataset_manifest
+#
+#     def on_fit_start(self, trainer, pl_module):
+#         if trainer.is_global_zero:
+#             self.dataset.prepare()
+#             trainer.logger.info("Dataset preparation is done in rank 0 process.")
+#         else:
+#             trainer.logger.info("Waiting for rank 0 process to prepare the dataset.")
+#             trainer.barrier("prepare_dataset_rank0")

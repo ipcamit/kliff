@@ -1115,6 +1115,9 @@ class Dataset:
         sharded: bool = False,
         dynamic_loading: bool = True,
         subdir: bool = False,
+        save_path: Optional[Path] = None,
+        reuse: bool = True,
+        checksum: Optional[str] = None,
     ):
         """
         Read configurations from LMDB file and append to a dataset.
@@ -1133,7 +1136,9 @@ class Dataset:
             length: Number of configurations to load.
         """
         instance = cls()
-        instance.add_from_lmdb(path, weight, sharded, dynamic_loading, subdir)
+        instance.add_from_lmdb(
+            path, weight, sharded, dynamic_loading, subdir, save_path, reuse, checksum
+        )
         return instance
 
     def add_from_lmdb(
@@ -1143,6 +1148,9 @@ class Dataset:
         sharded: bool = False,
         dynamic_loading: bool = True,
         subdir: bool = False,
+        save_path: Optional[Path] = None,
+        reuse: bool = True,
+        checksum: Optional[str] = None,
     ):
         """
         Read configurations from LMDB file and append to a dataset.
@@ -1167,16 +1175,45 @@ class Dataset:
         if isinstance(path, (str, Path)):
             path = [path]
 
+        if not save_path:
+            save_path = Path("./")  # current directory
+
+        if not checksum:
+            ds_hash = "|".join([str(p) for p in path])
+            checksum = hashlib.md5(ds_hash.encode()).hexdigest()
+        master_lmdb = save_path.joinpath(f"kliff_dataset_{checksum}.lmdb")
+
+        if master_lmdb.exists() and reuse:
+            # open a readonly lmdb env as that is all needed
+            master_lmdb_env = lmdb.open(
+                str(master_lmdb),
+                subdir=False,
+                readonly=True,
+                lock=False,
+                map_size=int(1e12),
+            )
+        else:
+            if master_lmdb.exists():
+                os.remove(master_lmdb)
+            master_lmdb_env = lmdb.open(
+                str(master_lmdb),
+                subdir=False,
+                readonly=False,
+                lock=False,
+                map_size=int(1e12),
+            )
+
+        self.add_metadata({"master_lmdb": master_lmdb})
+        self.add_metadata({"master_env": master_lmdb_env})
+
         for lmdb_idx, lmdb_path in enumerate(path):
             env = lmdb.open(str(lmdb_path), readonly=True, lock=False, subdir=subdir)
-
             # if isinstance(weight, Weight):
             #     configs = self._read_from_lmdb(env, weight, sharded, dynamic_loading, subdir)
             # else:
             #     configs = self._read_from_lmdb(env, None, sharded, dynamic_loading, subdir)
             #     Dataset.add_weights(configs, weight)
             logger.warning("Weights not implemented yet")
-            configs = self._read_from_lmdb(env, None, sharded, dynamic_loading, subdir)
 
             # save lmdb env in metadata
             if dynamic_loading:
@@ -1185,21 +1222,26 @@ class Dataset:
                 else:
                     self.add_metadata({"lmdb_envs": [env]})
 
-                if self.metadata.get("master_lmdb", None) is None:
-                    master_lmdb_file = "kliff_dataset_master.lmdb"
-                    master_env = lmdb.open(master_lmdb_file, readonly=False, lock=False, map_size=int(1e12))
-                    self.metadata["master_lmdb"] = master_lmdb_file
-                    self.metadata["master_env"] = master_env
+                # if self.metadata.get("master_lmdb", None) is None:
+                #     master_lmdb_file = "kliff_dataset_master.lmdb"
+                #     master_env = lmdb.open(master_lmdb_file, readonly=False, lock=False, map_size=int(1e12))
+                #     self.metadata["master_lmdb"] = master_lmdb_file
+                #     self.metadata["master_env"] = master_env
 
-                configs_idx = np.arange(
-                    len(self._configs), len(self._configs) + len(configs), dtype=int
-                )
-                self._configs = np.append(self._configs, configs_idx)
-                with self.metadata["master_env"].begin(write=True) as txn:
-                    for i, keys in zip(configs_idx, configs):
-                        key = f"{i}"
-                        idx = {"lmdb_env": f"{lmdb_idx}", "config_key": f"{keys}"}
-                        txn.put(key.encode(), dill.dumps(idx))
+                if not reuse:
+                    configs = self._read_from_lmdb(
+                        env, None, sharded, dynamic_loading, subdir
+                    )
+
+                    configs_idx = np.arange(
+                        len(self._configs), len(self._configs) + len(configs), dtype=int
+                    )
+                    self._configs = np.append(self._configs, configs_idx)
+                    with self.metadata["master_env"].begin(write=True) as txn:
+                        for i, keys in zip(configs_idx, configs):
+                            key = f"{i}"
+                            idx = {"lmdb_env": f"{lmdb_idx}", "config_key": f"{keys}"}
+                            txn.put(key.encode(), dill.dumps(idx))
 
             else:
                 self._configs.extend(configs)
@@ -1528,11 +1570,14 @@ class Dataset:
                     - /path/to/lmdb
                     - /path/to/lmdb
                 dynamic_loading: True
+                save: True         # Save processed dataset to a file, or reuse
+                path: /path/to/save # Save to this folder
             ```
 
 
         Args:
             dataset_manifest: List of configurations.
+            save_path: Path to save the dataset.
 
         Returns:
             A dataset of configurations.
@@ -1591,6 +1636,10 @@ class Dataset:
             dataset = Dataset.from_lmdb(
                 path=dataset_manifest.get("lmdb_paths", []),
                 weight=weights,
+                dynamic_loading=dataset_manifest.get("dynamic_loading", True),
+                save_path=Path(dataset_manifest.get("path", "./")),
+                reuse=dataset_manifest.get("save", True),
+                checksum=Dataset.get_manifest_checksum(dataset_manifest),
             )
         else:
             # this should not happen
@@ -1606,8 +1655,8 @@ class Dataset:
         if self.metadata.get("master_env"):
             self.metadata["master_env"].close()
 
-        if self.metadata.get("master_lmdb"):
-            shutil.rmtree(self.metadata["master_lmdb"], ignore_errors=True)
+        # if self.metadata.get("master_lmdb"):
+        #     shutil.rmtree(self.metadata["master_lmdb"], ignore_errors=True)
 
 
 class ConfigurationError(Exception):

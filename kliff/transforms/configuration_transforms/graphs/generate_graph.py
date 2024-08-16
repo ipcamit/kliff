@@ -198,7 +198,9 @@ class KIMDriverGraph(ConfigurationTransform):
     def __call__(
         self, configuration: Configuration, return_extended_state=False
     ) -> PyGGraph:
-        graph = self.forward(configuration, )
+        graph = self.forward(
+            configuration,
+        )
         if return_extended_state:
             graph = graph.to_dict()
         if self.copy_to_config:

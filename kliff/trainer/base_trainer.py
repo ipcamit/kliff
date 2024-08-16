@@ -91,7 +91,7 @@ class Trainer:
         # dataset variables
         self.dataset_manifest: dict = {
             "type": "kliff",
-            "path": "./",
+            "path": None,
             "save": False,
             "keys": {"energy": "energy", "forces": "forces"},
             "dynamic_loading": False,
@@ -418,8 +418,12 @@ class Trainer:
                 self.current["run_dir"] = dir_list[-1]
 
         # make dataset directory
-        self.current["data_dir"] = f"{self.workspace['name']}/datasets"
-        os.makedirs(self.current["data_dir"], exist_ok=True)
+        if not self.dataset_manifest["path"]:
+            self.current["data_dir"] = f"{self.workspace['name']}/datasets"
+            self.dataset_manifest["path"] = self.current["data_dir"]
+            os.makedirs(self.current["data_dir"], exist_ok=True)
+        else:
+            self.current["data_dir"] = self.dataset_manifest["path"]
 
     def setup_dataset(self):
         """
