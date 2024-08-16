@@ -209,15 +209,18 @@ class LightningTrainerWrapper(pl.LightningModule):
         # TODO enable energy forces weights again
 
         predicted_energy, predicted_forces = self.forward(batch)
+        loss = F.mse_loss(
+            predicted_energy.squeeze(), target_energy.squeeze()
+        ) + F.mse_loss(predicted_forces.squeeze(), target_forces.squeeze())
 
-        per_atom_force_loss = torch.sum(
-            (predicted_forces.squeeze() - target_forces.squeeze()) ** 2, dim=1
-        )
-
-        loss = (
-            F.mse_loss(predicted_energy.squeeze(), target_energy.squeeze())
-            + torch.mean(per_atom_force_loss) / 3
-        )  # divide by 3 to get correct MSE
+        # per_atom_force_loss = torch.sum(
+        #     (predicted_forces.squeeze() - target_forces.squeeze()) ** 2, dim=1
+        # )
+        #
+        # loss = (
+        #     F.mse_loss(predicted_energy.squeeze(), target_energy.squeeze())
+        #     + torch.mean(per_atom_force_loss) / 3
+        # )  # divide by 3 to get correct MSE
 
         self.log(
             "val_loss",
@@ -228,7 +231,8 @@ class LightningTrainerWrapper(pl.LightningModule):
             logger=True,
             sync_dist=True,
         )
-        return {"val_loss": loss, "per_atom_force_loss": per_atom_force_loss}
+        # return {"val_loss": loss, "per_atom_force_loss": per_atom_force_loss}
+        return loss
 
     # def test_step(self, batch, batch_idx):
     #     pass
@@ -444,15 +448,15 @@ class GNNLightningTrainer(Trainer):
             callbacks.append(early_stopping)
             logger.info("Early stopping setup complete.")
 
-        if self.loss_manifest.get("loss_traj", False):
-            loss_traj_folder = f"{self.current['run_dir']}/loss_trajectory"
-            loss_idxs = self.dataset_sample_manifest["val_indices"]
-            ckpt_interval = self.training_manifest.get("ckpt_interval", 10)
-            loss_trajectory_callback = LossTrajectoryCallback(
-                loss_traj_folder, loss_idxs, ckpt_interval
-            )
-            callbacks.append(loss_trajectory_callback)
-            logger.info("Loss trajectory setup complete.")
+        # if self.loss_manifest.get("loss_traj", False):
+        #     loss_traj_folder = f"{self.current['run_dir']}/loss_trajectory"
+        #     loss_idxs = self.dataset_sample_manifest["val_indices"]
+        #     ckpt_interval = self.training_manifest.get("ckpt_interval", 10)
+        #     loss_trajectory_callback = LossTrajectoryCallback(
+        #         loss_traj_folder, loss_idxs, ckpt_interval
+        #     )
+        #     callbacks.append(loss_trajectory_callback)
+        #     logger.info("Loss trajectory setup complete.")
 
         return callbacks
 
