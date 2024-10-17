@@ -7,7 +7,7 @@ from loguru import logger
 
 from kliff.models import KIMModel
 
-from ._kim_loss_functions import MSE_loss
+from .utils.losses import MSE_loss, MAE_loss
 from .base_trainer import Trainer, TrainerError
 
 SCIPY_MINIMIZE_METHODS = [
@@ -133,7 +133,6 @@ class KIMTrainer(Trainer):
                 loss += self.loss_function(
                     prediction["energy"], configuration.energy, configuration.weight.energy_weight
                 )
-                print(loss)
             if configuration.weight.forces_weight is not None:
                 loss += self.loss_function(
                     prediction["forces"], configuration.forces, configuration.weight.forces_weight
@@ -200,6 +199,8 @@ class KIMTrainer(Trainer):
         """
         if self.loss_manifest["function"].lower() == "mse":
             return MSE_loss
+        if self.loss_manifest["function"].lower() == "mae":
+            return MAE_loss
         else:
             raise TrainerError(
                 f"Loss function {self.loss_manifest['function']} not supported."

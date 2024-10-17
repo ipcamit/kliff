@@ -1,11 +1,9 @@
 import hashlib
 import importlib
 import json
-import multiprocessing
 import os
 import random
 import sys
-from copy import deepcopy
 from datetime import datetime
 from glob import glob
 from pathlib import Path
@@ -22,8 +20,6 @@ from kliff.dataset.weight import Weight
 
 if TYPE_CHECKING:
     from kliff.transforms.configuration_transforms import ConfigurationTransform
-
-from kliff.utils import get_n_configs_in_xyz
 
 
 class Trainer:
@@ -789,17 +785,6 @@ class Trainer:
             f.write(f"]\n")
             f.write("}\n")
 
-
-
-def _read_frames(file_path, start, end, energy_key, forces_key, weights):
-    ds = Dataset.from_ase(
-        path=file_path,
-        energy_key=energy_key,
-        forces_key=forces_key,
-        slices=slice(start, end),
-        weight=weights,
-    )
-    return ds
 
 
 class TrainerError(Exception):

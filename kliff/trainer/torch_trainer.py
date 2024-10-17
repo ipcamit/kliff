@@ -1,7 +1,7 @@
 import os
 import tarfile
 from copy import deepcopy
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union, Any
 
 import libdescriptor as lds
 import numpy as np
@@ -13,6 +13,7 @@ from torch_scatter import scatter_add
 
 from .base_trainer import Trainer, TrainerError
 from .utils.dataloaders import DescriptorDataset
+from .utils.losses import MSE_loss, MAE_loss
 
 if TYPE_CHECKING:
     from kliff.transforms.configuration_transforms import Descriptor
@@ -61,19 +62,20 @@ class DNNTrainer(Trainer):
         """
         self.optimizer = self._get_optimizer()
 
-    def loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def loss(self, x: torch.Tensor, y: torch.Tensor, weight: Union[float, torch.Tensor] = 1.0) -> torch.Tensor:
         """
         Compute the loss between the predicted and target values.
 
         Args:
             x (torch.Tensor): Predicted values.
             y (torch.Tensor): Target values.
+            weight (Union[float, torch.Tensor]): Weight to apply to the loss. Default is 1.0.
 
         Returns:
             torch.Tensor: Loss value
 
         """
-        return self.loss_function(x, y)
+        return self.loss_function(x, y, weight)
 
     def checkpoint(self):
         """
@@ -223,28 +225,19 @@ class DNNTrainer(Trainer):
             )
         return None
 
-    def _get_loss_function(self) -> torch.nn.Module:
+    def _get_loss_function(self):
         """
         Get the loss function for the model. The loss function is defined in the loss manifest.
 
         Returns:
-            torch.nn.Module: The loss function object.
+            The loss function object.
 
         """
         if self.loss_manifest["function"].lower() == "mse":
-            return torch.nn.MSELoss()
+            return MSE_loss
+        elif self.loss_manifest["function"].lower() == "mae":
+            return MAE_loss
         else:
-            # try torchmetrics for more loss functions
-            try:
-                import torchmetrics
-
-                loss = getattr(torchmetrics, self.loss_manifest["function"])()
-                logger.info(f"Using loss function: {self.loss_manifest['function']}")
-                return loss
-            except ImportError:
-                logger.info(
-                    "torchmetrics not found. If you want to use its loss functions, please install it."
-                )
             raise TrainerError(
                 f"Loss function {self.loss_manifest['function']} not supported."
             )
@@ -338,6 +331,7 @@ class DNNTrainer(Trainer):
         contribution = batch["contribution"]
         ptr = batch["ptr"]
         indexes = batch["index"]
+        weights = batch["weight"]
 
         descriptor_tensor = torch.tensor(
             descriptors,
@@ -359,95 +353,97 @@ class DNNTrainer(Trainer):
             torch.as_tensor(
                 properties["energy"], dtype=self.dtype, device=self.current["device"]
             ),
+            weights["energy"],
         )  # energy will always be present for conservative models
 
-        if self.loss_manifest["weights"]["energy"]:
-            loss = loss * self.loss_manifest["weights"]["energy"]
+        # if self.loss_manifest["weights"]["energy"]:
+        #     loss = loss * self.loss_manifest["weights"]["energy"]
 
-        if (
-            self.loss_manifest["weights"]["forces"]
-            or self.loss_manifest["weights"]["stress"]
-        ):
-            dE_dzeta = torch.autograd.grad(
-                predictions.sum(),
-                descriptor_tensor,
-                retain_graph=True,
-            )[0]
+        # if (
+        #     self.loss_manifest["weights"]["forces"]
+        #     or self.loss_manifest["weights"]["stress"]
+        # ):
+        dE_dzeta = torch.autograd.grad(
+            predictions.sum(),
+            descriptor_tensor,
+            retain_graph=True,
+        )[0]
 
-            forces = lds.gradient_batch(
-                self.configuration_transform._cdesc,
-                n_atoms,
-                ptr,
-                species,
-                neigh_list,
-                num_neigh,
-                coords,
-                descriptors,
-                dE_dzeta.double().detach().cpu().numpy(),
-            )
+        forces = lds.gradient_batch(
+            self.configuration_transform._cdesc,
+            n_atoms,
+            ptr,
+            species,
+            neigh_list,
+            num_neigh,
+            coords,
+            descriptors,
+            dE_dzeta.double().detach().cpu().numpy(),
+        )
 
-            forces_predicted = torch.zeros(
-                properties["forces"].shape,
+        forces_predicted = torch.zeros(
+            properties["forces"].shape,
+            device=self.current["device"],
+            dtype=self.dtype,
+        )
+        forces = torch.tensor(
+            forces, device=self.current["device"], dtype=self.dtype
+        )
+        force_summed = scatter_add(
+            forces,
+            torch.tensor(image, device=self.current["device"], dtype=torch.int64),
+            dim=0,
+        )
+        n_atoms_tensor = torch.tensor(
+            n_atoms, device=self.current["device"], dtype=torch.int64
+        )
+        ptr_tensor = torch.tensor(
+            ptr, device=self.current["device"], dtype=torch.int64
+        )
+
+        # TODO: See if we can do without the triple if condition
+        if (self.current["log_per_atom_pred"] and
+                (self.current["epoch"] % self.current["ckpt_interval"] == 0)):
+            per_atom_pred = []
+
+        for i in range(len(ptr_tensor)):
+            from_ = torch.sum(n_atoms_tensor[:i])
+            to_ = from_ + n_atoms_tensor[i]
+            forces_predicted[from_:to_] = force_summed[
+                ptr_tensor[i] : ptr_tensor[i] + n_atoms_tensor[i]
+            ]
+            if (self.current["log_per_atom_pred"] and
+                    (self.current["epoch"] % self.current["ckpt_interval"] == 0)):
+                per_atom_pred.append(
+                    forces_predicted[from_:to_].detach().cpu().numpy()
+                )
+
+        if (self.current["log_per_atom_pred"] and
+                (self.current["epoch"] % self.current["ckpt_interval"] == 0)):
+            self.log_per_atom_outputs(self.current["epoch"], indexes, per_atom_pred)
+
+        loss_forces = self.loss(
+            forces_predicted,
+            torch.tensor(
+                properties["forces"],
                 device=self.current["device"],
                 dtype=self.dtype,
-            )
-            forces = torch.tensor(
-                forces, device=self.current["device"], dtype=self.dtype
-            )
-            force_summed = scatter_add(
-                forces,
-                torch.tensor(image, device=self.current["device"], dtype=torch.int64),
-                dim=0,
-            )
-            n_atoms_tensor = torch.tensor(
-                n_atoms, device=self.current["device"], dtype=torch.int64
-            )
-            ptr_tensor = torch.tensor(
-                ptr, device=self.current["device"], dtype=torch.int64
-            )
-
-            # TODO: See if we can do without the triple if condition
-            if (self.current["log_per_atom_pred"] and
-                    (self.current["epoch"] % self.current["ckpt_interval"] == 0)):
-                per_atom_pred = []
-
-            for i in range(len(ptr_tensor)):
-                from_ = torch.sum(n_atoms_tensor[:i])
-                to_ = from_ + n_atoms_tensor[i]
-                forces_predicted[from_:to_] = force_summed[
-                    ptr_tensor[i] : ptr_tensor[i] + n_atoms_tensor[i]
-                ]
-                if (self.current["log_per_atom_pred"] and
-                        (self.current["epoch"] % self.current["ckpt_interval"] == 0)):
-                    per_atom_pred.append(
-                        forces_predicted[from_:to_].detach().cpu().numpy()
-                    )
-
-            if (self.current["log_per_atom_pred"] and
-                    (self.current["epoch"] % self.current["ckpt_interval"] == 0)):
-                self.log_per_atom_outputs(self.current["epoch"], indexes, per_atom_pred)
-
-            loss_forces = self.loss(
-                forces_predicted,
-                torch.tensor(
-                    properties["forces"],
-                    device=self.current["device"],
-                    dtype=self.dtype,
-                ),
-            )
-            loss = loss + loss_forces * self.loss_manifest["weights"]["forces"]
-            # TODO: Discuss and check if this is correct
-            # F = - ∂E/∂r, ℒ = f(E, F)
-            # F = - ∂E/∂ζ * ∂ζ/∂r <- ∂ζ/∂r is a jacobian, vjp is computed by enzyme
-            # ∂ℒ/∂θ = ∂ℒ/∂E * ∂E/∂θ + ∂ℒ/∂F * ∂F/∂θ
-            # tricky part is ∂F/∂θ, as F is computed using Enzyme
-            # ∂F/∂θ = ∂^2E/∂ζ∂θ * ∂ζ/∂r + ∂E/∂ζ * ∂^2ζ/∂r∂θ
-            #       = ∂^2E/∂ζ∂θ * ∂ζ/∂r + 0 (∂ζ/∂r independent of θ)
-            # So we do not need second derivative wrt to ζ,
-            # and ∂ζ/∂r is provided by the descriptor module. So autograd should be able
-            # to handle this. But need to confirm, else we need to explicitly compute
-            # ∂^2E/∂ζ∂θ and then call lds.gradient again.
-            # ask pytorch forum. Or use custom gradient optimization.
+            ),
+            weights["forces"],
+        )
+        # loss = loss + loss_forces * self.loss_manifest["weights"]["forces"]
+        # TODO: Discuss and check if this is correct
+        # F = - ∂E/∂r, ℒ = f(E, F)
+        # F = - ∂E/∂ζ * ∂ζ/∂r <- ∂ζ/∂r is a jacobian, vjp is computed by enzyme
+        # ∂ℒ/∂θ = ∂ℒ/∂E * ∂E/∂θ + ∂ℒ/∂F * ∂F/∂θ
+        # tricky part is ∂F/∂θ, as F is computed using Enzyme
+        # ∂F/∂θ = ∂^2E/∂ζ∂θ * ∂ζ/∂r + ∂E/∂ζ * ∂^2ζ/∂r∂θ
+        #       = ∂^2E/∂ζ∂θ * ∂ζ/∂r + 0 (∂ζ/∂r independent of θ)
+        # So we do not need second derivative wrt to ζ,
+        # and ∂ζ/∂r is provided by the descriptor module. So autograd should be able
+        # to handle this. But need to confirm, else we need to explicitly compute
+        # ∂^2E/∂ζ∂θ and then call lds.gradient again.
+        # ask pytorch forum. Or use custom gradient optimization.
         # TODO: Add stress loss
         # if self.loss_manifest["weights"]["stress"]:
         #     # stress = \sum_i (f_i \otimes r_i)

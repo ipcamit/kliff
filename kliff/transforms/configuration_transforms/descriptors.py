@@ -347,6 +347,7 @@ class Descriptor(ConfigurationTransform):
                 "coords": coords,
                 "descriptor": descriptors,
                 "index": index,
+                "weight": configuration.weight.to_dict(),
             }
         else:
             output = descriptors
