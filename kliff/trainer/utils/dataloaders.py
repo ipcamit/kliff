@@ -7,11 +7,7 @@ from torch.utils.data import Dataset as TorchDataset
 from torch_geometric.data import Dataset as TorchGeometricDataset
 
 from kliff.dataset import Dataset
-from kliff.transforms.configuration_transforms import (
-    Descriptor,
-    KIMDriverGraph,
-    PyGGraph,
-)
+from kliff.transforms.configuration_transforms import Descriptor, PyGGraph, RadialGraph
 
 
 class NeighborListDataset(TorchDataset):
@@ -153,7 +149,8 @@ class DescriptorDataset(TorchDataset):
                     )
                 except ValueError:
                     weight_0[key] = np.concatenate(
-                        (np.atleast_2d(weight_0[key]), np.atleast_2d(weight_i[key])), axis=0
+                        (np.atleast_2d(weight_0[key]), np.atleast_2d(weight_i[key])),
+                        axis=0,
                     )
 
             for prop in self.consistent_properties:
@@ -190,7 +187,7 @@ class GraphDataset(TorchGeometricDataset):
     the use of :class:`kliff.dataset.Dataset` as a data source for the graph based models.
     """
 
-    def __init__(self, dataset: Dataset, transform: KIMDriverGraph = None):
+    def __init__(self, dataset: Dataset, transform: RadialGraph = None):
         super().__init__("./", transform, None, None)
         self.dataset = dataset
 

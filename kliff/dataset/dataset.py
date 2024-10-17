@@ -270,10 +270,10 @@ class Configuration:
         PBC = atoms.get_pbc()
         energy = atoms.info[energy_key]
         try:
-            forces = atoms.arrays[forces_key] # ASE <= 3.22
+            forces = atoms.arrays[forces_key]  # ASE <= 3.22
         except KeyError:
             try:
-                forces = atoms.get_forces() # ASE >= 3.23
+                forces = atoms.get_forces()  # ASE >= 3.23
             except RuntimeError:
                 forces = None
 
@@ -1069,7 +1069,10 @@ class Dataset:
                 )
 
     @staticmethod
-    def add_weights(configurations: Union[List[Configuration], "Dataset"], source: Union[Path, str, Weight]):
+    def add_weights(
+        configurations: Union[List[Configuration], "Dataset"],
+        source: Union[Path, str, Weight],
+    ):
         """
         Load weights from a text file/ Weight class. The text file should contain 1 to 4 columns,
         whitespace seperated, formatted as,
@@ -1133,7 +1136,9 @@ class Dataset:
                     # check if config and forces have per atom weights
                     forces_weight = weight.get("forces", None)
                     if isinstance(forces_weight, list):
-                        forces_weight = np.array(forces_weight).reshape(-1, 1) # reshape to column vector for broadcasting
+                        forces_weight = np.array(forces_weight).reshape(
+                            -1, 1
+                        )  # reshape to column vector for broadcasting
 
                     config.weight = Weight(
                         config_weight=weight.get("config", None),
@@ -1170,7 +1175,9 @@ class Dataset:
 
             # if only one row, set same weight for all
             if weights_data.size == 1:
-                weights = {k: np.full(len(configurations), v) for k, v in weights.items()}
+                weights = {
+                    k: np.full(len(configurations), v) for k, v in weights.items()
+                }
 
             # set weights
             for i, config in enumerate(configurations):

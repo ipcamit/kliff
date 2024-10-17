@@ -33,10 +33,7 @@ except:
 
 from pytorch_lightning.callbacks import EarlyStopping
 
-from .utils.lightning_utils import (
-    SavePerAtomPredictions,
-    SaveModelCallback,
-)
+from .utils.lightning_utils import SaveModelCallback, SavePerAtomPredictions
 
 
 class LightningTrainer(pl.LightningModule):
@@ -452,7 +449,9 @@ class GNNLightningTrainer(Trainer):
             logger.info("Early stopping setup complete.")
 
         if self.current["log_per_atom_pred"]:
-            per_atom_pred_callback = SavePerAtomPredictions(self.current["per_atom_pred_database"], ckpt_interval)
+            per_atom_pred_callback = SavePerAtomPredictions(
+                self.current["per_atom_pred_database"], ckpt_interval
+            )
             callbacks.append(per_atom_pred_callback)
             logger.info("Per atom pred dumping setup complete.")
         else:

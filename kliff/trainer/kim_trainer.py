@@ -7,8 +7,8 @@ from loguru import logger
 
 from kliff.models import KIMModel
 
-from .utils.losses import MSE_loss, MAE_loss
 from .base_trainer import Trainer, TrainerError
+from .utils.losses import MAE_loss, MSE_loss
 
 SCIPY_MINIMIZE_METHODS = [
     "Nelder-Mead",
@@ -112,9 +112,15 @@ class KIMTrainer(Trainer):
         # compute the loss
         loss = 0.0
         for configuration in self.train_dataset:
-            compute_energy = True if configuration.weight.energy_weight is not None else False
-            compute_forces = True if configuration.weight.forces_weight is not None else False
-            compute_stress = True if configuration.weight.stress_weight is not None else False
+            compute_energy = (
+                True if configuration.weight.energy_weight is not None else False
+            )
+            compute_forces = (
+                True if configuration.weight.forces_weight is not None else False
+            )
+            compute_stress = (
+                True if configuration.weight.stress_weight is not None else False
+            )
 
             prediction = self.model(
                 configuration,
@@ -124,22 +130,29 @@ class KIMTrainer(Trainer):
             )
 
             if self.current["log_per_atom_pred"]:
-                self.log_per_atom_outputs(self.current["epoch"],
-                                          [configuration.metadata.get("index")],
-                                          [prediction["forces"]]
-                                          )
+                self.log_per_atom_outputs(
+                    self.current["epoch"],
+                    [configuration.metadata.get("index")],
+                    [prediction["forces"]],
+                )
 
             if configuration.weight.energy_weight is not None:
                 loss += self.loss_function(
-                    prediction["energy"], configuration.energy, configuration.weight.energy_weight
+                    prediction["energy"],
+                    configuration.energy,
+                    configuration.weight.energy_weight,
                 )
             if configuration.weight.forces_weight is not None:
                 loss += self.loss_function(
-                    prediction["forces"], configuration.forces, configuration.weight.forces_weight
+                    prediction["forces"],
+                    configuration.forces,
+                    configuration.weight.forces_weight,
                 )
             if configuration.weight.stress_weight is not None:
                 loss += self.loss_function(
-                    prediction["stress"], configuration.stress, configuration.weight.stress_weight
+                    prediction["stress"],
+                    configuration.stress,
+                    configuration.weight.stress_weight,
                 )
             if configuration.weight.config_weight is not None:
                 loss *= configuration.weight.config_weight

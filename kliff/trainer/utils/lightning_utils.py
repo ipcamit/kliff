@@ -1,5 +1,4 @@
 import os
-
 import pickle as pkl
 from typing import Any, Union
 
@@ -53,6 +52,7 @@ class SavePerAtomPredictions(pl.Callback):
     atom predictions are saved in the supplied lmdb file. Usually it is named
     `per_atom_pred_database.lmdb` in the run dir
     """
+
     def __init__(self, lmdb_file_handle, ckpt_interval):
         super().__init__()
         self.lmdb_file_handle = lmdb_file_handle
@@ -86,7 +86,12 @@ class SavePerAtomPredictions(pl.Callback):
             predicted_forces = outputs["per_atom_pred"]
             self._log_per_atom_outputs(epoch, batch, predicted_forces)
 
-    def _log_per_atom_outputs(self, epoch: Union[int, torch.Tensor], batch: Any, predicted_forces: torch.Tensor):
+    def _log_per_atom_outputs(
+        self,
+        epoch: Union[int, torch.Tensor],
+        batch: Any,
+        predicted_forces: torch.Tensor,
+    ):
         """
         This function is duplicate of ~:class:`kliff.trainer.Trainer.log_per_atom_outputs`.
 
@@ -104,14 +109,18 @@ class SavePerAtomPredictions(pl.Callback):
 
             for i in range(n_configs):
                 # get the prediction pointer, every even index is contributing
-                n_atoms = (batch["contributions"][batch["contributions"] == (2*i)]).shape[0]
+                n_atoms = (
+                    batch["contributions"][batch["contributions"] == (2 * i)]
+                ).shape[0]
                 to_ = from_ + n_atoms
                 pred = predicted_forces[from_:to_].detach().cpu().numpy()
                 from_ = to_
 
                 # save the predictions
-                txn.put(f"epoch_{epoch}|index_{idxs[i]}".encode(),
-                        pkl.dumps({"pred_0": pred, "n_atoms": n_atoms}))
+                txn.put(
+                    f"epoch_{epoch}|index_{idxs[i]}".encode(),
+                    pkl.dumps({"pred_0": pred, "n_atoms": n_atoms}),
+                )
 
 
 # TODO: LTAU callback?

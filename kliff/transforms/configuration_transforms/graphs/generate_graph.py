@@ -90,7 +90,7 @@ class PyGGraph(Data):
         return graph_dict
 
 
-class KIMDriverGraph(ConfigurationTransform):
+class RadialGraph(ConfigurationTransform):
     """
     Generate a graph representation of a configuration. This generator will also save the
     required parameters for porting the model over to KIM-API using TorchMLModelDriver.

@@ -21,11 +21,14 @@ def MSE_loss(
     Returns:
         The MSE of the residuals.
     """
-    residuals = (predictions - targets)
+    residuals = predictions - targets
     if isinstance(residuals, (np.ndarray, float, np.float64)):
         return np.mean((residuals * weights) ** 2)
     else:
-        return torch.mean((residuals ** 2) * torch.asarray(weights, dtype=residuals.dtype, device=residuals.device))
+        return torch.mean(
+            (residuals**2)
+            * torch.asarray(weights, dtype=residuals.dtype, device=residuals.device)
+        )
 
 
 def MAE_loss(
@@ -45,8 +48,11 @@ def MAE_loss(
     Returns:
         The MAE of the residuals.
     """
-    residuals = (predictions - targets)
+    residuals = predictions - targets
     if isinstance(residuals, (np.ndarray, float, np.float64)):
         return np.mean(np.abs(residuals * weights))
     else:
-        return torch.mean(torch.abs(residuals) * torch.asarray(weights, dtype=residuals.dtype, device=residuals.device))
+        return torch.mean(
+            torch.abs(residuals)
+            * torch.asarray(weights, dtype=residuals.dtype, device=residuals.device)
+        )

@@ -2,14 +2,13 @@ import hashlib
 import importlib
 import json
 import os
+import pickle as pkl
 import random
 import sys
 from datetime import datetime
 from glob import glob
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, List, Union
-
-import pickle as pkl
 
 import numpy as np
 import yaml
@@ -189,7 +188,7 @@ class Trainer:
             "ckpt_interval": 100,
             "log_per_atom_pred": False,
             # "per_atom_pred": {"train": None, "val": None},
-            "per_atom_pred_database": None
+            "per_atom_pred_database": None,
         }
         self.parse_manifest(training_manifest)
         self.initialize()
@@ -290,7 +289,9 @@ class Trainer:
         self.export_manifest |= manifest.get("export", {})
 
         # per save atom prediction?
-        self.current["log_per_atom_pred"] = training_manifest.get("log_per_atom_pred", False)
+        self.current["log_per_atom_pred"] = training_manifest.get(
+            "log_per_atom_pred", False
+        )
 
     def config_to_dict(self):
         """
@@ -455,11 +456,12 @@ class Trainer:
                 config.metadata |= {"index": idx}
 
             # TODO: add lmdb to the requirements
-            import lmdb # conditional import, only needed for per-atom predictions
+            import lmdb  # conditional import, only needed for per-atom predictions
+
             self.current["per_atom_pred_database"] = lmdb.open(
                 f"{self.current['run_dir']}/per_atom_pred_database.lmdb",
                 map_size=1e12,
-                subdir=False
+                subdir=False,
             )
 
     def save_config(self):
@@ -524,11 +526,6 @@ class Trainer:
                         "Skipping configuration transform."
                     )
                 else:
-                    configuration_class_name = (
-                        "KIMDriverGraph"
-                        if configuration_class_name.lower() == "graph"
-                        else configuration_class_name
-                    )
                     configuration_transform_module = importlib.import_module(
                         f"kliff.transforms.configuration_transforms"
                     )
@@ -674,7 +671,12 @@ class Trainer:
                     fmt="%d",
                 )
 
-    def log_per_atom_outputs(self, epoch:int, idx: Union[List[int], np.ndarray], predictions: List[np.ndarray]):
+    def log_per_atom_outputs(
+        self,
+        epoch: int,
+        idx: Union[List[int], np.ndarray],
+        predictions: List[np.ndarray],
+    ):
         """
         Log the per atom outputs to the database. It saves dictionary of predictions and
         n_atoms for each configuration. The key for predictions is pred_{n}, where n is
@@ -693,8 +695,10 @@ class Trainer:
         with self.current["per_atom_pred_database"].begin(write=True) as txn:
             for ids, pred in zip(idx, predictions):
                 if pred is not None:
-                    txn.put(f"epoch_{epoch}|index_{ids}".encode(),
-                            pkl.dumps({"pred_0": pred, "n_atoms": pred.shape[0]}))
+                    txn.put(
+                        f"epoch_{epoch}|index_{ids}".encode(),
+                        pkl.dumps({"pred_0": pred, "n_atoms": pred.shape[0]}),
+                    )
                 else:
                     logger.warning(f"Prediction for index {ids} is None. Skipping.")
 
@@ -784,7 +788,6 @@ class Trainer:
                 f.write(f'    "{module}"\n')
             f.write(f"]\n")
             f.write("}\n")
-
 
 
 class TrainerError(Exception):

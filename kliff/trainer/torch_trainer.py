@@ -1,7 +1,7 @@
 import os
 import tarfile
 from copy import deepcopy
-from typing import TYPE_CHECKING, Union, Any
+from typing import TYPE_CHECKING, Any, Union
 
 import libdescriptor as lds
 import numpy as np
@@ -13,7 +13,7 @@ from torch_scatter import scatter_add
 
 from .base_trainer import Trainer, TrainerError
 from .utils.dataloaders import DescriptorDataset
-from .utils.losses import MSE_loss, MAE_loss
+from .utils.losses import MAE_loss, MSE_loss
 
 if TYPE_CHECKING:
     from kliff.transforms.configuration_transforms import Descriptor
@@ -62,7 +62,9 @@ class DNNTrainer(Trainer):
         """
         self.optimizer = self._get_optimizer()
 
-    def loss(self, x: torch.Tensor, y: torch.Tensor, weight: Union[float, torch.Tensor] = 1.0) -> torch.Tensor:
+    def loss(
+        self, x: torch.Tensor, y: torch.Tensor, weight: Union[float, torch.Tensor] = 1.0
+    ) -> torch.Tensor:
         """
         Compute the loss between the predicted and target values.
 
@@ -386,9 +388,7 @@ class DNNTrainer(Trainer):
             device=self.current["device"],
             dtype=self.dtype,
         )
-        forces = torch.tensor(
-            forces, device=self.current["device"], dtype=self.dtype
-        )
+        forces = torch.tensor(forces, device=self.current["device"], dtype=self.dtype)
         force_summed = scatter_add(
             forces,
             torch.tensor(image, device=self.current["device"], dtype=torch.int64),
@@ -397,13 +397,12 @@ class DNNTrainer(Trainer):
         n_atoms_tensor = torch.tensor(
             n_atoms, device=self.current["device"], dtype=torch.int64
         )
-        ptr_tensor = torch.tensor(
-            ptr, device=self.current["device"], dtype=torch.int64
-        )
+        ptr_tensor = torch.tensor(ptr, device=self.current["device"], dtype=torch.int64)
 
         # TODO: See if we can do without the triple if condition
-        if (self.current["log_per_atom_pred"] and
-                (self.current["epoch"] % self.current["ckpt_interval"] == 0)):
+        if self.current["log_per_atom_pred"] and (
+            self.current["epoch"] % self.current["ckpt_interval"] == 0
+        ):
             per_atom_pred = []
 
         for i in range(len(ptr_tensor)):
@@ -412,14 +411,14 @@ class DNNTrainer(Trainer):
             forces_predicted[from_:to_] = force_summed[
                 ptr_tensor[i] : ptr_tensor[i] + n_atoms_tensor[i]
             ]
-            if (self.current["log_per_atom_pred"] and
-                    (self.current["epoch"] % self.current["ckpt_interval"] == 0)):
-                per_atom_pred.append(
-                    forces_predicted[from_:to_].detach().cpu().numpy()
-                )
+            if self.current["log_per_atom_pred"] and (
+                self.current["epoch"] % self.current["ckpt_interval"] == 0
+            ):
+                per_atom_pred.append(forces_predicted[from_:to_].detach().cpu().numpy())
 
-        if (self.current["log_per_atom_pred"] and
-                (self.current["epoch"] % self.current["ckpt_interval"] == 0)):
+        if self.current["log_per_atom_pred"] and (
+            self.current["epoch"] % self.current["ckpt_interval"] == 0
+        ):
             self.log_per_atom_outputs(self.current["epoch"], indexes, per_atom_pred)
 
         loss_forces = self.loss(

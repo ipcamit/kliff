@@ -106,6 +106,7 @@ class Weight:
             "stress": self.stress_weight,
         }
 
+
 class MagnitudeInverseWeight(Weight):
     r"""Non-uniform weight that is computed from the data. The calculation follows
     Lenosky et al. (1997), with some modification in notation,
