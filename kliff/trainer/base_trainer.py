@@ -270,10 +270,6 @@ class Trainer:
             )
 
         self.loss_manifest |= self.training_manifest.get("loss")
-        # update missing weights
-        for key in ["energy", "forces", "stress", "config"]:
-            if self.loss_manifest["weights"].get(key, None) is None:
-                self.loss_manifest["weights"][key] = None
 
         if self.training_manifest.get("optimizer", None) is None:
             logger.warning(
@@ -432,11 +428,14 @@ class Trainer:
         TODO: ColabFit integration for extreme scale datasets.
         """
 
-        weights = self.loss_manifest["weights"]
+        self.dataset = Dataset.get_dataset_from_manifest(self.dataset_manifest)
+
+        weights = self.loss_manifest.get("weights", None)
 
         if weights is not None:
             if isinstance(weights, str):
                 weights = Path(weights)
+                Dataset.add_weights(self.dataset, weights)
             elif isinstance(weights, dict):
                 weights = Weight(
                     config_weight=weights.get("config", None),
@@ -444,22 +443,14 @@ class Trainer:
                     forces_weight=weights.get("forces", None),
                     stress_weight=weights.get("stress", None),
                 )
+                if isinstance(weights.forces_weight, list):
+                    weights.forces_weight = np.array(weights.forces_weight)
+                if isinstance(weights.config_weight, list):
+                    weights.config_weight = np.array(weights.config_weight)
+
+                Dataset.add_weights(self.dataset, weights)
             else:
                 raise TrainerError("Weights must be a path or a dictionary.")
-
-        if self.dataset_manifest["type"] == "ase":
-            dataset_list = _parallel_read(
-                self.dataset_manifest["path"],
-                num_chunks=self.optimizer_manifest["num_workers"],
-                energy_key=self.dataset_manifest.get("keys", {}).get("energy", "energy"),
-                forces_key=self.dataset_manifest.get("keys", {}).get("forces", "forces"),
-                weights=weights,
-            )
-            self.dataset = deepcopy(dataset_list[0])
-            for ds in dataset_list[1:]:
-                self.dataset.configs.extend(ds)
-        else:
-            self.dataset = Dataset.get_dataset_from_manifest(self.dataset_manifest)
 
         # index the dataset
         # TODO: Can use identifier from the configuration?
@@ -705,8 +696,11 @@ class Trainer:
 
         with self.current["per_atom_pred_database"].begin(write=True) as txn:
             for ids, pred in zip(idx, predictions):
-                txn.put(f"epoch_{epoch}|index_{ids}".encode(),
-                        pkl.dumps({"pred_0": pred, "n_atoms": pred.shape[0]}))
+                if pred is not None:
+                    txn.put(f"epoch_{epoch}|index_{ids}".encode(),
+                            pkl.dumps({"pred_0": pred, "n_atoms": pred.shape[0]}))
+                else:
+                    logger.warning(f"Prediction for index {ids} is None. Skipping.")
 
     def loss(self, *args, **kwargs):
         raise TrainerError("loss not implemented.")
@@ -795,55 +789,6 @@ class Trainer:
             f.write(f"]\n")
             f.write("}\n")
 
-
-# Parallel processing for dataset loading #############################################
-def _parallel_read(
-    file_path,
-    num_chunks=None,
-    energy_key="Energy",
-    forces_key="forces",
-    weights=None,
-) -> List[Dataset]:
-    """
-    Read and transform frames in parallel. Returns n_chunks of datasets.
-    Args:
-        file_path: Path to the file
-        num_chunks: Number of chunks to split the dataset into, usually = number of cores
-        energy_key: Key for energy in the dataset
-        forces_key: Key for forces in the dataset
-
-    Returns:
-        List of datasets processed by each node
-
-    """
-    if not num_chunks:
-        num_chunks = multiprocessing.cpu_count()
-    total_frames = get_n_configs_in_xyz(file_path)
-    frames_per_chunk = total_frames // num_chunks
-
-    if (
-        frames_per_chunk == 0
-    ):  # if the number of frames is less than the number of chunks
-        frames_per_chunk = total_frames
-        num_chunks = 1
-
-    # Generate slices for each chunk
-    chunks = []
-    for i in range(num_chunks):
-        start = i * frames_per_chunk
-        end = (i + 1) * frames_per_chunk if i < num_chunks - 1 else total_frames
-        chunks.append((start, end))
-
-    with multiprocessing.Pool(processes=num_chunks) as pool:
-        ds = pool.starmap(
-            _read_frames,
-            [
-                (file_path, start, end, energy_key, forces_key, weights)
-                for start, end in chunks
-            ],
-        )
-
-    return ds
 
 
 def _read_frames(file_path, start, end, energy_key, forces_key, weights):

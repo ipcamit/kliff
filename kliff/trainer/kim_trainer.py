@@ -112,9 +112,9 @@ class KIMTrainer(Trainer):
         # compute the loss
         loss = 0.0
         for configuration in self.train_dataset:
-            compute_energy = True if configuration.weight.energy_weight else False
-            compute_forces = True if configuration.weight.forces_weight else False
-            compute_stress = True if configuration.weight.stress_weight else False
+            compute_energy = True if configuration.weight.energy_weight is not None else False
+            compute_forces = True if configuration.weight.forces_weight is not None else False
+            compute_stress = True if configuration.weight.stress_weight is not None else False
 
             prediction = self.model(
                 configuration,
@@ -129,19 +129,21 @@ class KIMTrainer(Trainer):
                                           [prediction["forces"]]
                                           )
 
-            if configuration.weight.energy_weight:
-                loss += configuration.weight.energy_weight * self.loss_function(
-                    prediction["energy"], configuration.energy
+            if configuration.weight.energy_weight is not None:
+                loss += self.loss_function(
+                    prediction["energy"], configuration.energy, configuration.weight.energy_weight
                 )
-            if configuration.weight.forces_weight:
-                loss += configuration.weight.forces_weight * self.loss_function(
-                    prediction["forces"], configuration.forces
+                print(loss)
+            if configuration.weight.forces_weight is not None:
+                loss += self.loss_function(
+                    prediction["forces"], configuration.forces, configuration.weight.forces_weight
                 )
-            if configuration.weight.stress_weight:
-                loss += configuration.weight.stress_weight * self.loss_function(
-                    prediction["stress"], configuration.stress
+            if configuration.weight.stress_weight is not None:
+                loss += self.loss_function(
+                    prediction["stress"], configuration.stress, configuration.weight.stress_weight
                 )
-            loss *= configuration.weight.config_weight
+            if configuration.weight.config_weight is not None:
+                loss *= configuration.weight.config_weight
 
         self.current["epoch"] += 1
         return loss
