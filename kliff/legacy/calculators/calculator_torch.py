@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from ase.units import GPa
+from ase.build import bulk
 from loguru import logger
 from torch.utils.data import DataLoader
 
@@ -44,11 +46,15 @@ class CalculatorTorch:
         use_energy: bool = True,
         use_forces: bool = True,
         use_stress: bool = False,
+        elastic_constant: bool = False,
         fingerprints_filename: Union[Path, str] = "fingerprints.pkl",
         fingerprints_mean_stdev_filename: Optional[Union[Path, str]] = None,
         reuse: bool = False,
         use_welford_method: bool = False,
         nprocs: int = 1,
+        diamond_zeta = None,
+        diamond_dzetadr_force = None,
+        diamond_dzetadr_stress = None,
     ):
         """
         Process configs to generate fingerprints.
@@ -78,6 +84,10 @@ class CalculatorTorch:
         self.use_energy = use_energy
         self.use_forces = use_forces
         self.use_stress = use_stress
+        self.elastic_constant = elastic_constant
+        self.diamond_zeta = None,
+        self.diamond_dzetadr_force = None,
+        self.diamond_dzetadr_stress = None,
 
         if isinstance(configs, Configuration):
             configs = [configs]
@@ -218,6 +228,36 @@ class CalculatorTorch:
                     s = self._compute_stress(dedz, dzetadr_stress, volume)
                     stress_config.append(s)
 
+        if self.elastic_constant:
+            # DFT
+            # B = 88.6 C11 = 153.3 C12 = 56.3 C44 = 72.2
+            # MP 149 lattice 5.44
+            from kliff.dataset import Configuration
+            Si = bulk("Si", crystalstructure="diamond", cubic=True, a=5.44)
+            Si_config = Configuration.from_ase_atoms(Si)
+            zeta_diamond, _, _  = self.model.descriptor.transform(Si_config)
+
+            new_cell = cell + torch.mm(cell , strain_mat)
+            energy = self.model(self.diamond_zeta)  # Use model to compute energy based on new cell and positions
+            # return energy / torch.det(cell).item() / GPa
+
+            # Directly compute the Hessian without optimization
+            hessian = torch.autograd.functional.hessian(lambda strain: _energy_from_strain(strain, model, positions, cell), strain_vec)
+
+            # Elastic constants calculations
+            C11 = hessian[0, 0].item()  # C11: Derived from the second derivative of energy w.r.t. strain along direction 1
+            C12 = hessian[0, 1].item()  # C12: Derived from the mixed second derivative of energy w.r.t. strain along directions 1 and 2
+            C44 = hessian[3, 3].item()  # C44: Derived from the second derivative of energy w.r.t. shear strain (direction 4)
+            B = (C11 + 2 * C12) / 3  # Bulk modulus B: Defined as (C11 + 2*C12) / 3 for cubic crystals
+
+            return {
+                "C11": C11,
+                "C12": C12,
+                "C44": C44,
+                "B": B,
+                "units": "GPa"
+            }
+
         self.results["energy"] = energy_config
         self.results["forces"] = forces_config
         self.results["stress"] = stress_config
@@ -272,6 +312,7 @@ class CalculatorTorch:
     def _compute_stress(denergy_dzeta, dzetadr, volume):
         forces = torch.tensordot(denergy_dzeta, dzetadr, dims=([0, 1], [0, 1])) / volume
         return forces
+
 
     def get_size_opt_params(self) -> Tuple[List[int], List[int], int]:
         """
