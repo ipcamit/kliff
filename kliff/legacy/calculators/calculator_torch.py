@@ -15,6 +15,9 @@ from kliff.models.neural_network import NeuralNetwork
 from kliff.utils import pickle_load, to_path
 
 
+from .py_symmetry_function import get_desc
+
+
 class CalculatorTorch:
     """
     A calculator for torch based models.
@@ -39,6 +42,7 @@ class CalculatorTorch:
         self.use_stress = None
 
         self.results = dict([(i, None) for i in self.implemented_property])
+        self._py_desc = get_desc()
 
     def create(
         self,
@@ -46,15 +50,12 @@ class CalculatorTorch:
         use_energy: bool = True,
         use_forces: bool = True,
         use_stress: bool = False,
-        elastic_constant: bool = False,
+        elastic_constant: bool = True,
         fingerprints_filename: Union[Path, str] = "fingerprints.pkl",
         fingerprints_mean_stdev_filename: Optional[Union[Path, str]] = None,
         reuse: bool = False,
         use_welford_method: bool = False,
         nprocs: int = 1,
-        diamond_zeta = None,
-        diamond_dzetadr_force = None,
-        diamond_dzetadr_stress = None,
     ):
         """
         Process configs to generate fingerprints.
@@ -85,9 +86,6 @@ class CalculatorTorch:
         self.use_forces = use_forces
         self.use_stress = use_stress
         self.elastic_constant = elastic_constant
-        self.diamond_zeta = None,
-        self.diamond_dzetadr_force = None,
-        self.diamond_dzetadr_stress = None,
 
         if isinstance(configs, Configuration):
             configs = [configs]
@@ -227,30 +225,96 @@ class CalculatorTorch:
                     volume = sample["dzetadr_volume"]
                     s = self._compute_stress(dedz, dzetadr_stress, volume)
                     stress_config.append(s)
-
         if self.elastic_constant:
+            # evaluate elastic constant for this batch
             # DFT
             # B = 88.6 C11 = 153.3 C12 = 56.3 C44 = 72.2
             # MP 149 lattice 5.44
-            from kliff.dataset import Configuration
-            Si = bulk("Si", crystalstructure="diamond", cubic=True, a=5.44)
-            Si_config = Configuration.from_ase_atoms(Si)
-            zeta_diamond, _, _  = self.model.descriptor.transform(Si_config)
+            # cutoff 4.5
+            def _energy_from_strain(strain_vec):
+                cell_ = torch.tensor([[0.0, 2.72, 2.72], [2.72, 0.0, 2.72], [2.72, 2.72, 0.0]], requires_grad=True)
+                num_neigh_ = torch.tensor([16, 16])
+                neigh_list_ = torch.tensor([10, 22, 26, 27, 30, 42, 23, 24, 38, 44, 11, 12, 16, 32, 28,  1,  0,
+                                            27, 23, 39, 43, 44, 11, 17, 31, 32, 13, 25, 28, 29, 33, 45])
+                positions_unraveled = torch.tensor(   [[ 0.  ,  0.  ,  0.  ],
+                                                       [ 1.36,  1.36,  1.36],
+                                                       [-5.44, -5.44, -5.44],
+                                                       [-4.08, -4.08, -4.08],
+                                                       [-2.72, -2.72, -5.44],
+                                                       [-1.36, -1.36, -4.08],
+                                                       [ 0.  ,  0.  , -5.44],
+                                                       [ 1.36,  1.36, -4.08],
+                                                       [-2.72, -5.44, -2.72],
+                                                       [-1.36, -4.08, -1.36],
+                                                       [ 0.  , -2.72, -2.72],
+                                                       [ 1.36, -1.36, -1.36],
+                                                       [ 2.72,  0.  , -2.72],
+                                                       [ 4.08,  1.36, -1.36],
+                                                       [ 0.  , -5.44,  0.  ],
+                                                       [ 1.36, -4.08,  1.36],
+                                                       [ 2.72, -2.72,  0.  ],
+                                                       [ 4.08, -1.36,  1.36],
+                                                       [ 5.44,  0.  ,  0.  ],
+                                                       [ 6.8 ,  1.36,  1.36],
+                                                       [-5.44, -2.72, -2.72],
+                                                       [-4.08, -1.36, -1.36],
+                                                       [-2.72,  0.  , -2.72],
+                                                       [-1.36,  1.36, -1.36],
+                                                       [ 0.  ,  2.72, -2.72],
+                                                       [ 1.36,  4.08, -1.36],
+                                                       [-2.72, -2.72,  0.  ],
+                                                       [-1.36, -1.36,  1.36],
+                                                       [ 2.72,  2.72,  0.  ],
+                                                       [ 4.08,  4.08,  1.36],
+                                                       [ 0.  , -2.72,  2.72],
+                                                       [ 1.36, -1.36,  4.08],
+                                                       [ 2.72,  0.  ,  2.72],
+                                                       [ 4.08,  1.36,  4.08],
+                                                       [ 5.44,  2.72,  2.72],
+                                                       [ 6.8 ,  4.08,  4.08],
+                                                       [-5.44,  0.  ,  0.  ],
+                                                       [-4.08,  1.36,  1.36],
+                                                       [-2.72,  2.72,  0.  ],
+                                                       [-1.36,  4.08,  1.36],
+                                                       [ 0.  ,  5.44,  0.  ],
+                                                       [ 1.36,  6.8 ,  1.36],
+                                                       [-2.72,  0.  ,  2.72],
+                                                       [-1.36,  1.36,  4.08],
+                                                       [ 0.  ,  2.72,  2.72],
+                                                       [ 1.36,  4.08,  4.08],
+                                                       [ 2.72,  5.44,  2.72],
+                                                       [ 4.08,  6.8 ,  4.08],
+                                                       [ 0.  ,  0.  ,  5.44],
+                                                       [ 1.36,  1.36,  6.8 ],
+                                                       [ 2.72,  2.72,  5.44],
+                                                       [ 4.08,  4.08,  6.8 ],
+                                                       [ 5.44,  5.44,  5.44],
+                                                       [ 6.8 ,  6.8 ,  6.8 ]])
+                positions_unraveled  = positions_unraveled @ torch.linalg.inv(cell_)
+                strain_mat = torch.zeros((3, 3))
+                strain_mat[0, 0] = strain_vec[0]
+                strain_mat[1, 1] = strain_vec[1]
+                strain_mat[2, 2] = strain_vec[2]
+                strain_mat[tuple([[1, 2], [2, 1]])] = strain_vec[3]
+                strain_mat[tuple([[0, 2], [2, 0]])] = strain_vec[4]
+                strain_mat[tuple([[0, 1], [1, 0]])] = strain_vec[5]
 
-            new_cell = cell + torch.mm(cell , strain_mat)
-            energy = self.model(self.diamond_zeta)  # Use model to compute energy based on new cell and positions
-            # return energy / torch.det(cell).item() / GPa
+                new_cell = cell_ + torch.mm(cell_ , strain_mat)
+                pos = positions_unraveled @ new_cell
+                energy = self.model(self._py_desc(pos, num_neigh_, neigh_list_))  # Use model to compute energy based on new cell and positions
+                energy = energy.sum() / torch.det(cell_).item() / GPa
+                return energy
 
             # Directly compute the Hessian without optimization
-            hessian = torch.autograd.functional.hessian(lambda strain: _energy_from_strain(strain, model, positions, cell), strain_vec)
-
+            strain_vec = torch.zeros(6, requires_grad=True)
+            hessian = torch.autograd.functional.hessian(_energy_from_strain , strain_vec)
             # Elastic constants calculations
-            C11 = hessian[0, 0].item()  # C11: Derived from the second derivative of energy w.r.t. strain along direction 1
-            C12 = hessian[0, 1].item()  # C12: Derived from the mixed second derivative of energy w.r.t. strain along directions 1 and 2
-            C44 = hessian[3, 3].item()  # C44: Derived from the second derivative of energy w.r.t. shear strain (direction 4)
-            B = (C11 + 2 * C12) / 3  # Bulk modulus B: Defined as (C11 + 2*C12) / 3 for cubic crystals
+            C11 = hessian[0, 0].item()
+            C12 = hessian[0, 1].item()
+            C44 = hessian[3, 3].item()
+            B = (C11 + 2 * C12) / 3
 
-            return {
+            self.results["elastic_constant"] = {
                 "C11": C11,
                 "C12": C12,
                 "C44": C44,
@@ -265,6 +329,7 @@ class CalculatorTorch:
             "energy": energy_config,
             "forces": forces_config,
             "stress": stress_config,
+            "elastic_constant": self.results["elastic_constant"]
         }
 
     @property

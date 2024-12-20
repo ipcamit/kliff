@@ -790,10 +790,16 @@ class LossNeuralNetworkModel(object):
                 batch. Note, how to normalize the loss of a single configuration is
                 determined by the `normalize` flag of `residual_data`.
         """
+
         results = self.calculator.compute(batch)
         energy_batch = results["energy"]
         forces_batch = results["forces"]
         stress_batch = results["stress"]
+        elastic_constant = results["elastic_constant"]
+        el_loss = (elastic_constant["B"] - 88.6)**2
+        el_loss += (elastic_constant["C11"] - 153.3)**2
+        el_loss += (elastic_constant["C12"] - 56.3)**2
+        el_loss += (elastic_constant["C44"] - 72.2)**2
 
         if forces_batch is None:
             forces_batch = [None] * len(batch)
@@ -812,7 +818,7 @@ class LossNeuralNetworkModel(object):
         loss_batch = torch.stack(losses).sum()
         if normalize:
             loss_batch /= len(batch)
-
+        loss_batch += el_loss # add the elastic constant loss
         return loss_batch
 
     def _get_loss_single_config(self, sample, pred_energy, pred_forces, pred_stress):
