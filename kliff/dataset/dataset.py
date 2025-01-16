@@ -19,11 +19,7 @@ from kliff.utils import stress_to_tensor, stress_to_voigt, to_path
 
 # For type checking
 if TYPE_CHECKING:
-    from colabfit.tools.configuration import Configuration as ColabfitConfiguration
     from colabfit.tools.database import MongoDatabase
-
-    from kliff.transforms.configuration_transforms import ConfigurationTransform
-    from kliff.transforms.property_transforms import PropertyTransform
 
 # check if colabfit-tools is installed
 try:
