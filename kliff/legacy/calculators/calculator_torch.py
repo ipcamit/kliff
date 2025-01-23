@@ -226,7 +226,8 @@ class CalculatorTorch:
                     s = self._compute_stress(dedz, dzetadr_stress, volume)
                     stress_config.append(s)
         calc_elastic_const_prob = torch.rand(1).item()
-        if self.elastic_constant and (calc_elastic_const_prob < 0.1): # only do elastic constant 10% of times
+        # if self.elastic_constant and (calc_elastic_const_prob < 0.1): # only do elastic constant 10% of times
+        if self.elastic_constant and epoch > 2000: # only do elastic constant 10% of times
             # evaluate elastic constant for this batch
             # DFT
             # B = 88.6 C11 = 153.3 C12 = 56.3 C44 = 72.2
