@@ -1,7 +1,7 @@
 # nothing to be imported by default?
 from .property_transforms import PropertyTransform, NormalizedPropertyTransform, RMSNormalizePropertyTransform, RMSMagnitudeNormalizePropertyTransform
 from .parameter_transforms import ParameterTransform, LogParameterTransform
-from .configuration_transforms import ConfigurationTransform, Descriptor, RadialGraph
+#from .configuration_transforms import ConfigurationTransform, Descriptor, RadialGraph
 
 __all__ = [
     "PropertyTransform",
@@ -10,7 +10,7 @@ __all__ = [
     "RMSMagnitudeNormalizePropertyTransform",
     "ParameterTransform",
     "LogParameterTransform",
-    "ConfigurationTransform",
-    "Descriptor",
-    "RadialGraph",
+ #   "ConfigurationTransform",
+ #   "Descriptor",
+ #   "RadialGraph",
 ]

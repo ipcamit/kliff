@@ -166,7 +166,7 @@ class CalculatorTorch:
         path = self.fingerprints_path
         self.model.fit(path)
 
-    def compute(self, batch):
+    def compute(self, batch, epoch=0):
         #
         # shape N--number of atoms in a config; D--feature dim
         # zeta: (N, D)
@@ -225,7 +225,8 @@ class CalculatorTorch:
                     volume = sample["dzetadr_volume"]
                     s = self._compute_stress(dedz, dzetadr_stress, volume)
                     stress_config.append(s)
-        if self.elastic_constant:
+        calc_elastic_const_prob = torch.rand(1).item()
+        if self.elastic_constant and (calc_elastic_const_prob < 0.1): # only do elastic constant 10% of times
             # evaluate elastic constant for this batch
             # DFT
             # B = 88.6 C11 = 153.3 C12 = 56.3 C44 = 72.2
@@ -321,6 +322,10 @@ class CalculatorTorch:
                 "B": B,
                 "units": "GPa"
             }
+
+        else:
+            self.results["elastic_constant"] = None
+
 
         self.results["energy"] = energy_config
         self.results["forces"] = forces_config

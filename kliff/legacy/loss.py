@@ -748,7 +748,7 @@ class LossNeuralNetworkModel(object):
 
                     def closure():
                         self.optimizer.zero_grad()
-                        loss = self._get_loss_batch(batch)
+                        loss = self._get_loss_batch(batch, epoch = epoch)
                         loss.backward()
                         return loss
 
@@ -780,7 +780,7 @@ class LossNeuralNetworkModel(object):
     #  The way going forward is to batch all necessary info in dataloader.
     #  The downsides is that then analytic and machine learning models will have
     #  different interfaces.
-    def _get_loss_batch(self, batch: List[Any], normalize: bool = True):
+    def _get_loss_batch(self, batch: List[Any], normalize: bool = True, epoch: int = 0):
         """
         Compute the loss of a batch of samples.
 
@@ -791,15 +791,18 @@ class LossNeuralNetworkModel(object):
                 determined by the `normalize` flag of `residual_data`.
         """
 
-        results = self.calculator.compute(batch)
+        results = self.calculator.compute(batch, epoch = epoch)
         energy_batch = results["energy"]
         forces_batch = results["forces"]
         stress_batch = results["stress"]
         elastic_constant = results["elastic_constant"]
-        el_loss = (elastic_constant["B"] - 88.6)**2
-        el_loss += (elastic_constant["C11"] - 153.3)**2
-        el_loss += (elastic_constant["C12"] - 56.3)**2
-        el_loss += (elastic_constant["C44"] - 72.2)**2
+        if elastic_constant:
+            el_loss = (elastic_constant["B"] - 88.6)**2
+            el_loss += (elastic_constant["C11"] - 153.3)**2
+            el_loss += (elastic_constant["C12"] - 56.3)**2
+            el_loss += (elastic_constant["C44"] - 72.2)**2
+        else:
+            el_loss = torch.tensor(0.0)
 
         if forces_batch is None:
             forces_batch = [None] * len(batch)
