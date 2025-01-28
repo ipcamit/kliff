@@ -8,7 +8,7 @@ def cut_cos(r, rcut):
     if r < rcut:
         return 0.5 * (torch.cos(math.pi * r / rcut) + 1.0)
     else:
-        return torch.tensor(0.0)
+        return torch.tensor(0.0, device=r.device)
 
 @torch.jit.script
 def sym_g1(r, rcut):
@@ -46,12 +46,12 @@ def sym_g4(zeta, lambda_, eta, rij, rik, rjk, rcut):
     
     base = 1 + lambda_ * cos_ijk
     
-    costerm = torch.pow(base, zeta) if base > 0 else torch.tensor(0.0)
+    costerm = torch.pow(base, zeta) if base > 0 else torch.tensor(0.0, device=rij.device)
     
     eterm = torch.exp(-eta * (rijsq + riksq + rjksq))
 
     phi = (
-        torch.pow(torch.tensor(2.), 1. - zeta)
+        torch.pow(torch.tensor(2., device=rij.device), 1. - zeta)
         * costerm
         * eterm
         * cut_cos(rij, rcutij)
@@ -76,7 +76,7 @@ def sym_g5(zeta, lambda_, eta, rij, rik, rjk, rcut):
     eterm = torch.exp(-eta * (rijsq + riksq))
 
     phi = (
-        torch.pow(torch.tensor(2.), 1. - zeta)
+        torch.pow(torch.tensor(2., device=rij.device), 1. - zeta)
         * costerm
         * eterm
         * cut_cos(rij, rcutij)
@@ -91,16 +91,19 @@ class BehlerSymmertryFunctions(torch.nn.Module):
     """
     def __init__(self, hyperparameters, cutoff):
         super().__init__()
-        self.g2 = hyperparameters["g2"]
-        self.g4 = hyperparameters["g4"]
-        self.len = len(hyperparameters["g2"]) + len(hyperparameters["g4"])
-        self.cutoff = torch.tensor(cutoff)
-        self.cutoff_sq = cutoff * cutoff
+        self.register_buffer("g2", hyperparameters["g2"])
+        self.register_buffer("g4", hyperparameters["g4"])
+        self.register_buffer("len", torch.tensor(
+                                                    len(hyperparameters["g2"]) +
+                                                    len(hyperparameters["g4"]),
+                                                    dtype=torch.long))
+        self.register_buffer("cutoff", torch.tensor(cutoff))
+        self.register_buffer("cutoff_sq", cutoff * cutoff)
 
     def forward(self, pos, numnei, neighs):
         n_contrib = numnei.size()[0]
         ptr = torch.cat([torch.tensor([0]), torch.cumsum(numnei, 0)])
-        desc = torch.zeros(n_contrib, self.len)
+        desc = torch.zeros(n_contrib, self.len, device=pos.device)
         for i in range(n_contrib):
             pos_i = pos[i]
 

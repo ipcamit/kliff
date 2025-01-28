@@ -43,6 +43,7 @@ class CalculatorTorch:
 
         self.results = dict([(i, None) for i in self.implemented_property])
         self._py_desc = get_desc()
+        self._py_desc.to(device)
 
     def create(
         self,
@@ -234,11 +235,17 @@ class CalculatorTorch:
             # MP 149 lattice 5.44
             # cutoff 4.5
             def _energy_from_strain(strain_vec):
-                cell_ = torch.tensor([[0.0, 2.72, 2.72], [2.72, 0.0, 2.72], [2.72, 2.72, 0.0]], requires_grad=True)
-                num_neigh_ = torch.tensor([16, 16])
-                neigh_list_ = torch.tensor([10, 22, 26, 27, 30, 42, 23, 24, 38, 44, 11, 12, 16, 32, 28,  1,  0,
-                                            27, 23, 39, 43, 44, 11, 17, 31, 32, 13, 25, 28, 29, 33, 45])
-                positions_unraveled = torch.tensor(   [[ 0.  ,  0.  ,  0.  ],
+                cell_ = torch.tensor([[0.0, 2.72, 2.72],
+                                            [2.72, 0.0, 2.72],
+                                            [2.72, 2.72, 0.0]],
+                                     requires_grad=True,
+                                     device=self._model.device)
+                num_neigh_ = torch.tensor([16, 16], device=self._model.device)
+                neigh_list_ = torch.tensor([10, 22, 26, 27, 30, 42, 23, 24, 38, 44, 11,
+                                            12, 16, 32, 28,  1,  0, 27, 23, 39, 43, 44,
+                                            11, 17, 31, 32, 13, 25, 28, 29, 33, 45],
+                                           device=self._model.device)
+                positions_unraveled = torch.tensor([[ 0.  ,  0.  ,  0.  ],
                                                        [ 1.36,  1.36,  1.36],
                                                        [-5.44, -5.44, -5.44],
                                                        [-4.08, -4.08, -4.08],
@@ -291,9 +298,10 @@ class CalculatorTorch:
                                                        [ 2.72,  2.72,  5.44],
                                                        [ 4.08,  4.08,  6.8 ],
                                                        [ 5.44,  5.44,  5.44],
-                                                       [ 6.8 ,  6.8 ,  6.8 ]])
+                                                       [ 6.8 ,  6.8 ,  6.8 ]],
+                                                      device=self._model.device)
                 positions_unraveled  = positions_unraveled @ torch.linalg.inv(cell_)
-                strain_mat = torch.zeros((3, 3))
+                strain_mat = torch.zeros((3, 3), device=self._model.device)
                 strain_mat[0, 0] = strain_vec[0]
                 strain_mat[1, 1] = strain_vec[1]
                 strain_mat[2, 2] = strain_vec[2]
@@ -308,7 +316,7 @@ class CalculatorTorch:
                 return energy
 
             # Directly compute the Hessian without optimization
-            strain_vec = torch.zeros(6, requires_grad=True)
+            strain_vec = torch.zeros(6, requires_grad=True, device=self._model.device)
             hessian = torch.autograd.functional.hessian(_energy_from_strain , strain_vec)
             # Elastic constants calculations
             C11 = hessian[0, 0].item()
