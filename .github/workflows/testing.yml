@@ -66,6 +66,8 @@ jobs:
           # TODO, here, we install ptemcee from Yonatan's fork. See setup.py for details.
           python -m pip uninstall --yes ptemcee
           python -m pip install git+https://github.com/yonatank93/ptemcee.git@enhance_v1.0.0
+          
+          python -c "import libdescriptor as lds;print(lds.AvailableDescriptors(0));"
 
       - name: Run tests
         shell: bash -el {0}
