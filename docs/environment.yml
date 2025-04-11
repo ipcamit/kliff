@@ -30,3 +30,8 @@ dependencies:
     - lightning
     - tensorboard
     - tensorboardX
+
+variables:
+  CXX: x86_64-conda-linux-gnu-c++
+  CC: x86_64-conda-linux-gnu-gcc
+  FC: x86_64-conda-linux-gnu-gfortran
