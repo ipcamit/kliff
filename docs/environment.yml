@@ -1,0 +1,29 @@
+name: docs-environment
+
+dependencies:
+  - python=3.10
+  - sphinx
+  - furo
+  - sphinx-gallery
+  - sphinx-autodoc-typehints
+  - matplotlib
+  - myst-nb
+  - sphinx-copybutton
+  - sphinx-design
+  - kimpy
+  - kim-api
+  - libdescriptor
+
+  - pip:
+    - git+https://github.com/openkim/kliff.git@main
+    - torch==2.4.0
+    - --index-url https://download.pytorch.org/whl/cpu
+    - torch_geometric
+    - torch_scatter
+    - torch_sparse
+    - torch_cluster
+    - -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
+    - lightning
+    - tensorboard
+    - tensorboardX
+
