@@ -28,6 +28,7 @@ dependencies:
 
   - pip:
     - git+https://github.com/openkim/kliff.git@main
+    - loguru
     - lightning
     - torch_scatter -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
     - torch_sparse -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
