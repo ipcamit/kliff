@@ -16,7 +16,7 @@ dependencies:
   - sphinx-copybutton
   - sphinx-design
   - kimpy
-  - kim-api=2.3.0
+  - kim-api=2.4.0
   - libdescriptor
   - pip
   - cmake < 4.0.0
