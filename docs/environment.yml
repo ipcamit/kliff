@@ -1,5 +1,10 @@
 name: docs-environment
 
+channels:
+  - conda-forge
+  - ipcamit
+
+
 dependencies:
   - python=3.10
   - sphinx
@@ -13,6 +18,7 @@ dependencies:
   - kimpy
   - kim-api
   - libdescriptor
+  - pip
 
   - pip:
     - git+https://github.com/openkim/kliff.git@main
