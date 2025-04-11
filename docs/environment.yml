@@ -21,8 +21,15 @@ dependencies:
   - pip
 
   - pip:
+    - torch==2.4.0 --index-url https://download.pytorch.org/whl/cpu
+    - torch_geometric
+
+  - pip:
     - git+https://github.com/openkim/kliff.git@main
     - lightning
+    - torch_scatter -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
+    - torch_sparse -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
+    - torch_cluster -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
     - lightning
     - tensorboard
     - tensorboardX

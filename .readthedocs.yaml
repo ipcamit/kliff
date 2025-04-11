@@ -9,12 +9,7 @@ build:
   os: "ubuntu-20.04"
   tools:
     python: "mambaforge-22.9"
-  commands:
-    - pip install torch==2.4.0 --index-url https://download.pytorch.org/whl/cpu
-    - pip install torch_geometric
-    - pip install torch_scatter -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
-    - pip install torch_sparse -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
-    - pip install torch_cluster -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
+
 sphinx:
   configuration: docs/source/conf.py
 
