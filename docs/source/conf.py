@@ -227,6 +227,7 @@ autodoc_mock_imports = [
     "yaml",
     "ase",
     "torch",
+    "loguru",
     "torch_lightning",
     "libdescriptor",
 ]

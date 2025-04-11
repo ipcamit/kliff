@@ -25,6 +25,12 @@ dependencies:
   - pip:
     - torch==2.4.0 --index-url https://download.pytorch.org/whl/cpu
     - torch_geometric
+    - kliff
+    - loguru
+    - lightning
+    - tensorboard
+    - tensorboardX
+
 
   - pip:
     - kliff
