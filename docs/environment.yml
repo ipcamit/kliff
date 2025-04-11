@@ -16,7 +16,7 @@ dependencies:
   - sphinx-copybutton
   - sphinx-design
   - kimpy
-  - kim-api
+  - kim-api=2.3.0
   - libdescriptor
   - pip
   - cmake < 4.0.0
@@ -30,16 +30,3 @@ dependencies:
     - lightning
     - tensorboard
     - tensorboardX
-
-
-  - pip:
-    - kliff
-    - loguru
-    - lightning
-    - torch_scatter -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
-    - torch_sparse -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
-    - torch_cluster -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
-    - lightning
-    - tensorboard
-    - tensorboardX
-
