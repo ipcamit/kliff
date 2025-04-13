@@ -9,6 +9,11 @@ build:
   os: "ubuntu-20.04"
   tools:
     python: "mambaforge-22.9"
+  jobs:
+    post_create_environment:
+      - kim-api-activate
+      - kim-api-collections-management install system SW_StillingerWeber_1985_Si__MO_405512056662_006
+      - echo "CONDA_PREFIX=$CONDA_PREFIX"
 
 sphinx:
   configuration: docs/source/conf.py
