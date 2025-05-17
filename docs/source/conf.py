@@ -14,6 +14,7 @@ import os
 import sys
 import subprocess
 from pathlib import Path
+from types import ModuleType
 from typing import List
 
 # sys.path.insert(0, os.path.abspath('.'))
@@ -221,7 +222,7 @@ epub_exclude_files = ["search.html"]
 # https://docs.readthedocs.io/en/stable/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
 # This is useful when some external dependencies are not installed at build time,
 # which can break the building process.
-autodoc_mock_imports = [
+mock_imp = [
     "numpy",
     "scipy",
     "scipy.optimize",
@@ -247,6 +248,13 @@ autodoc_mock_imports = [
     "kliff.legacy.descriptors.symmetry_function.sf",
     "kliff.transforms.configuration_transforms.graphs.graph_module"
 ]
+
+def _mock(name):
+    sys.modules[name] = ModuleType(name)
+    return sys.modules[name]
+
+for module in mock_imp:
+    _mock(module)
 
 # do not sort member functions of a class
 autodoc_member_order = "bysource"
