@@ -215,21 +215,8 @@ epub_title = project
 # A list of files that should not be packed into the epub file.
 epub_exclude_files = ["search.html"]
 
-# do not sort member functions of a class
-autodoc_member_order = "bysource"
-
-# -- Math setup --------------------------------------------------------------
-# imgmath settings
-imgmath_image_format = "svg"
-imgmath_latex_preamble = "\\usepackage{bm} \\usepackage{amsmath}"
-
-# -- myst-nb -----------------------------------------------------------------
-nb_execution_timeout = 120
-
-
 
 # -- Mock setup --------------------------------------------------------------
-# MOCK IMPORTS BEFORE MODULE INIT?
 # A list of modules to be mocked up.
 # https://docs.readthedocs.io/en/stable/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
 # This is useful when some external dependencies are not installed at build time,
@@ -260,6 +247,17 @@ autodoc_mock_imports = [
     "kliff.legacy.descriptors.symmetry_function.sf",
     "kliff.transforms.configuration_transforms.graphs.graph_module"
 ]
+
+# do not sort member functions of a class
+autodoc_member_order = "bysource"
+
+# -- Math setup --------------------------------------------------------------
+# imgmath settings
+imgmath_image_format = "svg"
+imgmath_latex_preamble = "\\usepackage{bm} \\usepackage{amsmath}"
+
+# -- myst-nb -----------------------------------------------------------------
+nb_execution_timeout = 120
 
 # -- generate api doc ----------------------------------------------------------
 
