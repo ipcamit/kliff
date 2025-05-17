@@ -16,8 +16,6 @@ import subprocess
 from pathlib import Path
 from typing import List
 
-from docs.src.conf import todo_include_todos
-
 # sys.path.insert(0, os.path.abspath('.'))
 
 # This should be the path to the package, not the source of the doc
