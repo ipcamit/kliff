@@ -229,7 +229,7 @@ autodoc_mock_imports = [
     "yaml",
     "ase",
     "torch",
-    "pytorch_lightning"
+    "pytorch_lightning",
     "torch_scatter",
     "torch_sparse",
     "torch_geometric",
