@@ -236,7 +236,13 @@ autodoc_mock_imports = [
     "loguru",
     "tensorboard",
     "tensorboardx",
-    "monty"
+    "monty",
+    "kliff.neighbor",
+    "kliff.neighbor.neighlist",
+    "kliff.legacy.descriptors.bispectrum",
+    "kliff.legacy.descriptors.bispectrum.bs",
+    "kliff.legacy.descriptors.symmetry_function",
+    "kliff.legacy.descriptors.symmetry_function.sf",
 ]
 
 # do not sort member functions of a class
