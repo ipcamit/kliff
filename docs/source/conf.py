@@ -16,6 +16,8 @@ import subprocess
 from pathlib import Path
 from typing import List
 
+from docs.src.conf import todo_include_todos
+
 # sys.path.insert(0, os.path.abspath('.'))
 
 # This should be the path to the package, not the source of the doc
@@ -63,10 +65,12 @@ extensions = [
     "myst_nb",
     "sphinx_copybutton",
     "sphinx_design",
-    # 'sphinx.ext.todo',
+    'sphinx.ext.todo',
     # 'sphinx.ext.coverage',
     # "myst_parser",
 ]
+
+todo_include_todos = False
 
 myst_enable_extensions = ["amsmath", "dollarmath"]
 
@@ -227,7 +231,7 @@ autodoc_mock_imports = [
     "yaml",
     "ase",
     "torch",
-    "torch_lightning",
+    "pytorch_lightning"
     "torch_scatter",
     "torch_sparse",
     "torch_geometric",
@@ -243,6 +247,7 @@ autodoc_mock_imports = [
     "kliff.legacy.descriptors.bispectrum.bs",
     "kliff.legacy.descriptors.symmetry_function",
     "kliff.legacy.descriptors.symmetry_function.sf",
+    "kliff.transforms.configuration_transforms.graphs.graph_module"
 ]
 
 # do not sort member functions of a class
