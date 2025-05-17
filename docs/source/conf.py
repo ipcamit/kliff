@@ -14,7 +14,6 @@ import os
 import sys
 import subprocess
 from pathlib import Path
-from types import ModuleType
 from typing import List
 
 # sys.path.insert(0, os.path.abspath('.'))
@@ -216,13 +215,26 @@ epub_title = project
 # A list of files that should not be packed into the epub file.
 epub_exclude_files = ["search.html"]
 
+# do not sort member functions of a class
+autodoc_member_order = "bysource"
+
+# -- Math setup --------------------------------------------------------------
+# imgmath settings
+imgmath_image_format = "svg"
+imgmath_latex_preamble = "\\usepackage{bm} \\usepackage{amsmath}"
+
+# -- myst-nb -----------------------------------------------------------------
+nb_execution_timeout = 120
+
+
 
 # -- Mock setup --------------------------------------------------------------
+# MOCK IMPORTS BEFORE MODULE INIT?
 # A list of modules to be mocked up.
 # https://docs.readthedocs.io/en/stable/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
 # This is useful when some external dependencies are not installed at build time,
 # which can break the building process.
-mock_imp = [
+autodoc_mock_imports = [
     "numpy",
     "scipy",
     "scipy.optimize",
@@ -248,24 +260,6 @@ mock_imp = [
     "kliff.legacy.descriptors.symmetry_function.sf",
     "kliff.transforms.configuration_transforms.graphs.graph_module"
 ]
-
-def _mock(name):
-    sys.modules[name] = ModuleType(name)
-    return sys.modules[name]
-
-for module in mock_imp:
-    _mock(module)
-
-# do not sort member functions of a class
-autodoc_member_order = "bysource"
-
-# -- Math setup --------------------------------------------------------------
-# imgmath settings
-imgmath_image_format = "svg"
-imgmath_latex_preamble = "\\usepackage{bm} \\usepackage{amsmath}"
-
-# -- myst-nb -----------------------------------------------------------------
-nb_execution_timeout = 120
 
 # -- generate api doc ----------------------------------------------------------
 
