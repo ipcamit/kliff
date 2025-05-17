@@ -236,6 +236,7 @@ autodoc_mock_imports = [
     "loguru",
     "tensorboard",
     "tensorboardx",
+    "monty"
 ]
 
 # do not sort member functions of a class

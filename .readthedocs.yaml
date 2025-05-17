@@ -22,4 +22,3 @@ formats:
 python:
   install:
     -   requirements: docs/requirements-docs.txt
-    -   setup_py_install: true
